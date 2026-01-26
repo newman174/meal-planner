@@ -1,0 +1,14 @@
+{
+  "name": "meal-planner",
+  "version": "1.0.0",
+  "description": "Simple weekly meal planner for baby and adult meals",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.0"
+  }
+}

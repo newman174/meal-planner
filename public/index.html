@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meal Planner</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Meal Planner</h1>
+    <div class="week-nav">
+      <button id="prev-week" aria-label="Previous week">&larr;</button>
+      <span id="week-label"></span>
+      <button id="next-week" aria-label="Next week">&rarr;</button>
+      <button id="today-btn" class="btn-small">Today</button>
+    </div>
+    <div class="header-actions">
+      <button id="history-btn" class="btn-small">History</button>
+      <button id="copy-btn" class="btn-small">Copy Week</button>
+    </div>
+  </header>
+
+  <main id="week-view"></main>
+
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-title"></h2>
+        <button id="modal-close" class="btn-close">&times;</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
