@@ -1,0 +1,12 @@
+# WiFi credentials
+CIRCUITPY_WIFI_SSID = "your_wifi_ssid"
+CIRCUITPY_WIFI_PASSWORD = "your_wifi_password"
+
+# Meal planner server (no trailing slash)
+MEAL_PLANNER_URL = "http://192.168.1.100:3000"
+
+# How often to refresh (minutes). Display deep sleeps between refreshes.
+REFRESH_MINUTES = "30"
+
+# Seconds of inactivity before entering deep sleep (default 120 = 2 minutes)
+IDLE_TIMEOUT_SECONDS = "120"
