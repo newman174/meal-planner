@@ -1,8 +1,7 @@
 """
 Meal Planner display for Adafruit MagTag (ESP32-S2/S3, 2.9" e-ink).
-Fetches the next 3 days from /api/schedule/upcoming and renders them
-as single-day pages with button navigation.
-Deep sleeps after idle timeout or on demand for battery life.
+Fetches today's meals from /api/schedule/upcoming and renders them
+with a high-contrast e-ink layout. Deep sleeps for battery life.
 
 Required CircuitPython libraries in /lib/:
   - adafruit_requests.mpy
@@ -35,87 +34,79 @@ WIDTH = 296
 HEIGHT = 128
 FONT = terminalio.FONT
 CHAR_W = 6
-MAX_CHARS = WIDTH // CHAR_W  # ~49
-LH = 14  # line height
-
-DAY_FULL = {
-    "Monday": "MONDAY", "Tuesday": "TUESDAY", "Wednesday": "WEDNESDAY",
-    "Thursday": "THURSDAY", "Friday": "FRIDAY", "Saturday": "SATURDAY",
-    "Sunday": "SUNDAY",
-}
-
+HEADER_H = 28
 LOW_BATTERY_V = 3.5
-DEBOUNCE_S = 0.3  # 300ms debounce between presses
+DEBOUNCE_S = 0.3
 
-# Status LEDs
 leds = neopixel.NeoPixel(board.NEOPIXEL, 4, brightness=0.03)
 
 
-# ── Helpers ─────────────────────────────────────────────────
-def trunc(text, n=MAX_CHARS):
-    """Truncate text to fit display width."""
+# ── Graphics primitives ─────────────────────────────────────
+def trunc(text, n):
+    """Truncate text to n characters."""
     return text if len(text) <= n else text[: n - 2] + ".."
 
 
-def white_background():
-    """Create a white background tile."""
+def white_bg():
     bmp = displayio.Bitmap(WIDTH, HEIGHT, 1)
     pal = displayio.Palette(1)
     pal[0] = 0xFFFFFF
     return displayio.TileGrid(bmp, pixel_shader=pal)
 
 
-def separator(y):
-    """Create a 1px horizontal line."""
-    bmp = displayio.Bitmap(WIDTH - 8, 1, 1)
+def black_bar(w, h, x=0, y=0):
+    bmp = displayio.Bitmap(w, h, 1)
     pal = displayio.Palette(1)
     pal[0] = 0x000000
-    return displayio.TileGrid(bmp, pixel_shader=pal, x=4, y=y)
+    return displayio.TileGrid(bmp, pixel_shader=pal, x=x, y=y)
 
 
-def _refresh_display():
-    """Wait for e-ink cooldown, then refresh and block until done."""
-    display = board.DISPLAY
-    remaining = display.time_to_refresh
-    if remaining > 0:
-        print(f"Waiting {remaining:.1f}s for display cooldown")
-        time.sleep(remaining)
-    display.refresh()
-    while display.busy:
-        pass
+def hline(y, x=8, w=None):
+    if w is None:
+        w = WIDTH - 16
+    bmp = displayio.Bitmap(w, 1, 1)
+    pal = displayio.Palette(1)
+    pal[0] = 0x000000
+    return displayio.TileGrid(bmp, pixel_shader=pal, x=x, y=y)
 
 
-# ── Battery ─────────────────────────────────────────────────
-def read_battery_voltage():
-    """Read battery voltage via the MagTag's 2x voltage divider."""
+def bullet(x, y, size=3):
+    """Small filled square used as a list bullet."""
+    bmp = displayio.Bitmap(size, size, 1)
+    pal = displayio.Palette(1)
+    pal[0] = 0x000000
+    return displayio.TileGrid(bmp, pixel_shader=pal, x=x, y=y - size // 2)
+
+
+def big_text(text, x, y, color=0x000000):
+    """Label rendered at 2x scale via a scaled Group."""
+    grp = displayio.Group(scale=2, x=x, y=y)
+    grp.append(Label(FONT, text=text, color=color, x=0, y=0))
+    return grp
+
+
+# ── Hardware ────────────────────────────────────────────────
+def read_battery():
     adc = analogio.AnalogIn(board.VOLTAGE_MONITOR)
-    voltage = (adc.value / 65535) * 3.3 * 2
+    v = (adc.value / 65535) * 3.3 * 2
     adc.deinit()
-    return voltage
+    return v
 
 
-# ── Buttons ─────────────────────────────────────────────────
 def init_buttons():
-    """Setup the 4 MagTag buttons as digital inputs with pull-ups.
-
-    Returns list [A, B, C, D] mapped to pins D15, D14, D12, D11.
-    Pressed when value == False.
-    """
     pins = [board.D15, board.D14, board.D12, board.D11]
-    buttons = []
-    for pin in pins:
-        btn = digitalio.DigitalInOut(pin)
-        btn.direction = digitalio.Direction.INPUT
-        btn.pull = digitalio.Pull.UP
-        buttons.append(btn)
-    return buttons
+    btns = []
+    for p in pins:
+        b = digitalio.DigitalInOut(p)
+        b.direction = digitalio.Direction.INPUT
+        b.pull = digitalio.Pull.UP
+        btns.append(b)
+    return btns
 
 
-# ── NeoPixel feedback ───────────────────────────────────────
-def flash_neopixels(color, duration=0.15):
-    """Brief LED flash for button feedback."""
+def flash(color, dur=0.15):
     leds.fill(color)
-    time.sleep(duration)
+    time.sleep(dur)
     leds.fill((0, 0, 0))
 
 
@@ -132,7 +123,7 @@ def connect():
     print(f"Connected: {wifi.radio.ipv4_address}")
 
 
-def fetch(session):
+def fetch_today(session):
     leds.fill((0, 0, 255))
     url = f"{API_BASE}/api/schedule/upcoming"
     print(f"Fetching {url}")
@@ -140,131 +131,124 @@ def fetch(session):
     data = resp.json()
     resp.close()
     leds.fill((0, 0, 0))
-    return data["days"]
+    return data["days"][0]
 
 
-# ── Display rendering ──────────────────────────────────────
+# ── Display ─────────────────────────────────────────────────
+def _refresh():
+    d = board.DISPLAY
+    r = d.time_to_refresh
+    if r > 0:
+        print(f"Waiting {r:.1f}s for display cooldown")
+        time.sleep(r)
+    d.refresh()
+    while d.busy:
+        pass
+
+
 def render_loading():
-    """Show a loading splash screen on boot."""
-    display = board.DISPLAY
+    d = board.DISPLAY
     g = displayio.Group()
-    g.append(white_background())
-    g.append(Label(FONT, text="MEAL PLANNER", color=0x000000, x=4, y=10))
-    g.append(separator(20))
-    g.append(Label(FONT, text="Loading...", color=0x000000, x=4, y=40))
-    display.root_group = g
-    _refresh_display()
+    g.append(white_bg())
+    g.append(black_bar(WIDTH, HEADER_H))
+    g.append(Label(FONT, text="MEAL PLANNER", color=0xFFFFFF, x=8, y=HEADER_H // 2))
+    g.append(Label(FONT, text="Connecting...", color=0x000000, x=8, y=HEADER_H + 20))
+    d.root_group = g
+    _refresh()
 
 
-def _batt_str(batt):
-    """Format battery voltage string with low-battery prefix."""
-    s = f"{batt:.2f}v"
+def render_today(day, batt):
+    """Render today's meal plan with large text and clean layout."""
+    d = board.DISPLAY
+    g = displayio.Group()
+    g.append(white_bg())
+
+    # ── Black header bar ──
+    g.append(black_bar(WIDTH, HEADER_H))
+
+    # Day name at 2x scale (white on black)
+    day_name = day["day"].upper()
+    g.append(big_text(day_name, x=6, y=HEADER_H // 2, color=0xFFFFFF))
+
+    # Date + battery (small, white on black, right-aligned)
+    batt_s = f"{batt:.1f}v"
     if batt < LOW_BATTERY_V:
-        s = "!" + s
-    return s
+        batt_s = "!" + batt_s
+    info = f"{day['date']}   {batt_s}"
+    g.append(Label(FONT, text=info, color=0xFFFFFF,
+                   x=WIDTH - len(info) * CHAR_W - 6, y=HEADER_H // 2))
 
+    y = HEADER_H + 12
 
-def render_day(days, idx, batt):
-    """Render a single day's meal plan on the full screen."""
-    display = board.DISPLAY
-    day = days[idx]
-    g = displayio.Group()
-    g.append(white_background())
-
-    y = 6
-
-    # ── Title row ──
-    day_name = DAY_FULL.get(day["day"], day["day"].upper())
-    title = day_name
-    if idx == 0:
-        title += " (Today)"
-    g.append(Label(FONT, text=title, color=0x000000, x=4, y=y))
-
-    # Right side: date, page indicator, battery voltage
-    right = f"{day['date']}  {idx + 1}/{len(days)}  {_batt_str(batt)}"
-    rx = WIDTH - len(right) * CHAR_W - 4
-    g.append(Label(FONT, text=right, color=0x000000, x=rx, y=y))
-
-    y += LH
-    g.append(separator(y - 4))
-
-    # ── Adult dinner ──
+    # ── Dinner (2x scale when it fits, 1x fallback) ──
     dinner = day["adult"]["dinner"] or "-"
-    g.append(Label(FONT, text=trunc(f"DINNER: {dinner}"), color=0x000000, x=4, y=y))
-    y += LH
+    max_big = (WIDTH - 16) // (CHAR_W * 2)  # ~23 chars at 2x
+    if len(dinner) <= max_big:
+        g.append(big_text(dinner, x=6, y=y))
+        y += 22
+    else:
+        g.append(big_text(trunc(dinner, max_big), x=6, y=y))
+        y += 22
 
-    # ── Note (only if non-empty) ──
+    # ── Note ──
     note = day.get("note", "")
     if note:
-        g.append(
-            Label(FONT, text=trunc(f"  Note: {note}"), color=0x000000, x=4, y=y)
-        )
-        y += LH
+        g.append(Label(FONT, text=trunc(note, (WIDTH - 16) // CHAR_W),
+                        color=0x000000, x=8, y=y))
+        y += 13
 
-    # ── Separator before baby section ──
-    g.append(separator(y - 4))
+    y += 2
+    g.append(hline(y))
+    y += 8
 
-    # ── Baby meals — two columns ──
+    # ── Baby meals — two columns, items only (no field labels) ──
     bl = day["baby"]["lunch"]
     bd = day["baby"]["dinner"]
-    col1_x = 4
-    col2_x = 152
+    c1 = 8
+    c2 = 152
 
-    # Column headers
-    g.append(Label(FONT, text="BABY LUNCH", color=0x000000, x=col1_x, y=y))
-    g.append(Label(FONT, text="BABY DINNER", color=0x000000, x=col2_x, y=y))
-    y += LH
+    g.append(Label(FONT, text="LUNCH", color=0x000000, x=c1, y=y))
+    g.append(Label(FONT, text="DINNER", color=0x000000, x=c2, y=y))
+    y += 13
 
-    # Cereal
-    g.append(Label(FONT, text=f"Cereal: {bl.get('cereal') or '-'}", color=0x000000, x=col1_x, y=y))
-    g.append(Label(FONT, text=f"Cereal: {bd.get('cereal') or '-'}", color=0x000000, x=col2_x, y=y))
-    y += LH
+    lunch_items = [v for v in [bl.get("cereal"), bl.get("fruit"), bl.get("yogurt")] if v]
+    dinner_items = [v for v in [bd.get("cereal"), bd.get("fruit"), bd.get("vegetable")] if v]
 
-    # Fruit
-    g.append(Label(FONT, text=f"Fruit:  {bl.get('fruit') or '-'}", color=0x000000, x=col1_x, y=y))
-    g.append(Label(FONT, text=f"Fruit:  {bd.get('fruit') or '-'}", color=0x000000, x=col2_x, y=y))
-    y += LH
+    for i in range(max(len(lunch_items), len(dinner_items))):
+        if i < len(lunch_items):
+            g.append(bullet(c1, y))
+            g.append(Label(FONT, text=lunch_items[i], color=0x000000, x=c1 + 8, y=y))
+        if i < len(dinner_items):
+            g.append(bullet(c2, y))
+            g.append(Label(FONT, text=dinner_items[i], color=0x000000, x=c2 + 8, y=y))
+        y += 12
 
-    # Yogurt / Vegetable
-    g.append(Label(FONT, text=f"Yogurt: {bl.get('yogurt') or '-'}", color=0x000000, x=col1_x, y=y))
-    g.append(Label(FONT, text=f"Veg:    {bd.get('vegetable') or '-'}", color=0x000000, x=col2_x, y=y))
-
-    # ── Button legend at bottom ──
-    legend = "[A]<  [B]>  [C]Refresh  [D]Sleep"
-    g.append(Label(FONT, text=legend, color=0x000000, x=4, y=HEIGHT - 10))
-
-    display.root_group = g
-    _refresh_display()
-    print(f"Rendered page {idx}: {day_name} {day['date']}")
+    d.root_group = g
+    _refresh()
+    print(f"Rendered: {day['day']} {day['date']}")
 
 
 def render_error(msg, batt=None):
-    """Show an error screen with optional battery voltage."""
-    display = board.DISPLAY
+    d = board.DISPLAY
     g = displayio.Group()
-    g.append(white_background())
-
-    g.append(Label(FONT, text="MEAL PLANNER", color=0x000000, x=4, y=10))
+    g.append(white_bg())
+    g.append(black_bar(WIDTH, HEADER_H))
+    g.append(Label(FONT, text="MEAL PLANNER", color=0xFFFFFF, x=8, y=HEADER_H // 2))
     if batt is not None:
-        bs = _batt_str(batt)
-        g.append(
-            Label(FONT, text=bs, color=0x000000,
-                  x=WIDTH - len(bs) * CHAR_W - 4, y=10)
-        )
-
-    g.append(separator(20))
-    g.append(Label(FONT, text="Could not fetch meals:", color=0x000000, x=4, y=34))
-    g.append(Label(FONT, text=trunc(str(msg)), color=0x000000, x=4, y=52))
-    g.append(
-        Label(FONT, text=f"Retrying in {REFRESH_MINUTES}m", color=0x000000, x=4, y=74)
-    )
-    display.root_group = g
-    _refresh_display()
+        bs = f"{batt:.1f}v"
+        g.append(Label(FONT, text=bs, color=0xFFFFFF,
+                       x=WIDTH - len(bs) * CHAR_W - 6, y=HEADER_H // 2))
+    g.append(Label(FONT, text="Could not load meals:", color=0x000000, x=8, y=HEADER_H + 14))
+    g.append(Label(FONT, text=trunc(str(msg), (WIDTH - 16) // CHAR_W),
+                   color=0x000000, x=8, y=HEADER_H + 30))
+    g.append(Label(FONT, text=f"Retrying in {REFRESH_MINUTES}m",
+                   color=0x000000, x=8, y=HEADER_H + 50))
+    d.root_group = g
+    _refresh()
 
 
 # ── Deep sleep ──────────────────────────────────────────────
 def deep_sleep():
-    """Deep sleep to save battery. Board resets on wake, re-running code.py."""
     leds.fill((0, 0, 0))
     try:
         import alarm
@@ -284,12 +268,12 @@ connect()
 pool = socketpool.SocketPool(wifi.radio)
 session = adafruit_requests.Session(pool)
 
-batt = read_battery_voltage()
+batt = read_battery()
 print(f"Battery: {batt:.2f}V")
 
-days = None
+today = None
 try:
-    days = fetch(session)
+    today = fetch_today(session)
     leds.fill((0, 0, 0))
 except Exception as e:
     leds.fill((255, 50, 0))
@@ -298,11 +282,9 @@ except Exception as e:
     time.sleep(0.5)
     deep_sleep()
 
-# Render first day
-current_page = 0
-render_day(days, current_page, batt)
+render_today(today, batt)
 
-# ── Button poll loop ────────────────────────────────────────
+# ── Button loop (C=refresh, D=sleep) ───────────────────────
 buttons = init_buttons()
 last_press = time.monotonic()
 last_activity = time.monotonic()
@@ -310,12 +292,10 @@ last_activity = time.monotonic()
 while True:
     now = time.monotonic()
 
-    # Idle timeout → deep sleep
     if now - last_activity >= IDLE_TIMEOUT_SECONDS:
         print("Idle timeout, entering deep sleep")
         deep_sleep()
 
-    # Poll buttons (pressed when value == False)
     pressed = None
     for i, btn in enumerate(buttons):
         if not btn.value:
@@ -325,35 +305,20 @@ while True:
                 last_activity = now
             break
 
-    if pressed == 0:  # A — Previous day
-        flash_neopixels((255, 255, 255))
-        if current_page > 0:
-            current_page -= 1
-            render_day(days, current_page, batt)
-        print(f"Button A: page {current_page}")
-
-    elif pressed == 1:  # B — Next day
-        flash_neopixels((255, 255, 255))
-        if current_page < len(days) - 1:
-            current_page += 1
-            render_day(days, current_page, batt)
-        print(f"Button B: page {current_page}")
-
-    elif pressed == 2:  # C — Refresh
-        print("Button C: refreshing data")
-        flash_neopixels((0, 0, 255))
+    if pressed == 2:  # C — Refresh
+        print("Refreshing data")
+        flash((0, 0, 255))
         try:
-            days = fetch(session)
-            batt = read_battery_voltage()
-            current_page = 0
-            render_day(days, current_page, batt)
+            today = fetch_today(session)
+            batt = read_battery()
+            render_today(today, batt)
         except Exception as e:
             print(f"Refresh error: {e}")
             render_error(e, batt)
 
-    elif pressed == 3:  # D — Deep sleep
-        print("Button D: entering deep sleep")
-        flash_neopixels((255, 0, 0))
+    elif pressed == 3:  # D — Sleep
+        print("Entering deep sleep")
+        flash((255, 0, 0))
         deep_sleep()
 
-    time.sleep(0.1)  # 100ms poll interval
+    time.sleep(0.1)
