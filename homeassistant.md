@@ -19,6 +19,7 @@ rest:
           - day
           - baby
           - adult
+          - note
 
       - name: "Meal Plan Tomorrow"
         value_template: "{{ value_json.days[1].adult.dinner }}"
@@ -28,6 +29,7 @@ rest:
           - day
           - baby
           - adult
+          - note
 
       - name: "Meal Plan Day After"
         value_template: "{{ value_json.days[2].adult.dinner }}"
@@ -37,6 +39,7 @@ rest:
           - day
           - baby
           - adult
+          - note
 ```
 
 ### 2. Add a dashboard card
@@ -47,46 +50,47 @@ Add a **Markdown card** to your dashboard:
 type: markdown
 title: Meal Plan
 content: >-
-  ## {{ state_attr('sensor.meal_plan_today', 'day') }}
+  ### {{ state_attr('sensor.meal_plan_today', 'day') }}
 
-  **Adult Dinner:** {{ states('sensor.meal_plan_today') }}
-  {% if state_attr('sensor.meal_plan_today', 'adult').note %}
-  _{{ state_attr('sensor.meal_plan_today', 'adult').note }}_
-  {% endif %}
+  {% if state_attr('sensor.meal_plan_today', 'note') %}_{{ state_attr('sensor.meal_plan_today', 'note') }}_{% endif %}
 
-  **Baby Lunch:** {{ state_attr('sensor.meal_plan_today', 'baby').lunch.cereal }}
+  Dinner: {{ states('sensor.meal_plan_today') }}
+
+  Baby Lunch: {{ state_attr('sensor.meal_plan_today', 'baby').lunch.cereal }}
   / {{ state_attr('sensor.meal_plan_today', 'baby').lunch.fruit }}
   / {{ state_attr('sensor.meal_plan_today', 'baby').lunch.yogurt }}
 
-  **Baby Dinner:** {{ state_attr('sensor.meal_plan_today', 'baby').dinner.cereal }}
+  Baby Dinner: {{ state_attr('sensor.meal_plan_today', 'baby').dinner.cereal }}
   / {{ state_attr('sensor.meal_plan_today', 'baby').dinner.fruit }}
   / {{ state_attr('sensor.meal_plan_today', 'baby').dinner.vegetable }}
 
-  ---
+  ### {{ state_attr('sensor.meal_plan_tomorrow', 'day') }}
 
-  ## {{ state_attr('sensor.meal_plan_tomorrow', 'day') }}
+  {% if state_attr('sensor.meal_plan_tomorrow', 'note') %}_{{ state_attr('sensor.meal_plan_tomorrow', 'note') }}_{% endif %}
 
-  **Adult Dinner:** {{ states('sensor.meal_plan_tomorrow') }}
-  {% if state_attr('sensor.meal_plan_tomorrow', 'adult').note %}
-  _{{ state_attr('sensor.meal_plan_tomorrow', 'adult').note }}_
-  {% endif %}
+  Dinner: {{ states('sensor.meal_plan_tomorrow') }}
 
-  **Baby Lunch:** {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.cereal }}
+  Baby Lunch: {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.cereal }}
   / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.fruit }}
   / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.yogurt }}
 
-  **Baby Dinner:** {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.cereal }}
+  Baby Dinner: {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.cereal }}
   / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.fruit }}
   / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.vegetable }}
 
-  ---
+  ### {{ state_attr('sensor.meal_plan_day_after', 'day') }}
 
-  ## {{ state_attr('sensor.meal_plan_day_after', 'day') }}
+  {% if state_attr('sensor.meal_plan_day_after', 'note') %}_{{ state_attr('sensor.meal_plan_day_after', 'note') }}_{% endif %}
 
-  **Adult Dinner:** {{ states('sensor.meal_plan_day_after') }}
-  {% if state_attr('sensor.meal_plan_day_after', 'adult').note %}
-  _{{ state_attr('sensor.meal_plan_day_after', 'adult').note }}_
-  {% endif %}
+  Dinner: {{ states('sensor.meal_plan_day_after') }}
+
+  Baby Lunch: {{ state_attr('sensor.meal_plan_day_after', 'baby').lunch.cereal }}
+  / {{ state_attr('sensor.meal_plan_day_after', 'baby').lunch.fruit }}
+  / {{ state_attr('sensor.meal_plan_day_after', 'baby').lunch.yogurt }}
+
+  Baby Dinner: {{ state_attr('sensor.meal_plan_day_after', 'baby').dinner.cereal }}
+  / {{ state_attr('sensor.meal_plan_day_after', 'baby').dinner.fruit }}
+  / {{ state_attr('sensor.meal_plan_day_after', 'baby').dinner.vegetable }}
 ```
 
 ### 3. Restart Home Assistant

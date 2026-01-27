@@ -15,7 +15,7 @@ const meals = [
     baby_dinner_fruit: 'Apple',
     baby_dinner_vegetable: 'Green Beans',
     adult_dinner: 'Steak, Mashed Potatoes, Green beans',
-    adult_dinner_note: '',
+    note: '',
   },
   { // Tuesday
     day: 1,
@@ -26,7 +26,7 @@ const meals = [
     baby_dinner_fruit: 'Apple',
     baby_dinner_vegetable: 'Green Beans',
     adult_dinner: 'Ribs, Cauliflower, Corn',
-    adult_dinner_note: 'Abuelos',
+    note: 'Abuelos',
   },
   { // Wednesday
     day: 2,
@@ -37,7 +37,7 @@ const meals = [
     baby_dinner_fruit: 'Apple',
     baby_dinner_vegetable: 'Green Beans',
     adult_dinner: 'Salmon',
-    adult_dinner_note: '',
+    note: '',
   },
   { // Thursday
     day: 3,
@@ -48,7 +48,7 @@ const meals = [
     baby_dinner_fruit: 'Apple',
     baby_dinner_vegetable: 'Peas or Sweet Potato',
     adult_dinner: 'Costco chicken?',
-    adult_dinner_note: '',
+    note: '',
   },
 ];
 

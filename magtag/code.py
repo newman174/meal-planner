@@ -194,7 +194,7 @@ def render_day(days, idx, batt):
     y += LH
 
     # ── Note (only if non-empty) ──
-    note = day["adult"]["note"]
+    note = day.get("note", "")
     if note:
         g.append(
             Label(FONT, text=trunc(f"  Note: {note}"), color=0x000000, x=4, y=y)

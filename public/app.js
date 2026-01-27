@@ -12,7 +12,6 @@ const FIELDS = {
   ],
   adult_dinner: [
     { key: 'adult_dinner', label: 'Dinner' },
-    { key: 'adult_dinner_note', label: 'Note' },
   ],
 };
 
@@ -98,6 +97,17 @@ function renderWeek(weekData) {
 
     card.innerHTML = `<h2>${DAY_NAMES[day.day]} <span class="day-date">${dateLabel}</span></h2>`;
 
+    // Day-level note
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.className = 'day-note';
+    noteInput.value = day.note || '';
+    noteInput.placeholder = 'Add a note...';
+    noteInput.addEventListener('input', () => {
+      debouncedSave(noteInput, currentWeekOf, day.day, 'note');
+    });
+    card.appendChild(noteInput);
+
     // Baby Lunch
     card.appendChild(createMealSection('Baby Lunch', FIELDS.baby_lunch, day));
     // Baby Dinner
@@ -127,13 +137,6 @@ function createMealSection(title, fields, dayData) {
     input.id = `${dayData.day}-${f.key}`;
     input.value = dayData[f.key] || '';
     input.placeholder = f.label;
-
-    if (f.key === 'adult_dinner_note') {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'note-field';
-      wrapper.style.display = 'contents';
-      input.placeholder = 'Optional note...';
-    }
 
     input.addEventListener('input', () => {
       debouncedSave(input, currentWeekOf, dayData.day, f.key);
