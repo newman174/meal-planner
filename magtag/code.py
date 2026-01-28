@@ -47,6 +47,18 @@ def trunc(text, n):
     return text if len(text) <= n else text[: n - 2] + ".."
 
 
+def word_wrap(text, n):
+    """Split text into two lines, breaking at word boundary if possible."""
+    if len(text) <= n:
+        return text, ""
+    # Find last space within limit
+    break_at = text.rfind(" ", 0, n + 1)
+    if break_at <= 0:
+        # No space found, hard break
+        break_at = n
+    return text[:break_at].rstrip(), text[break_at:].lstrip()
+
+
 def white_bg():
     bmp = displayio.Bitmap(WIDTH, HEIGHT, 1)
     pal = displayio.Palette(1)
@@ -131,7 +143,7 @@ def fetch_today(session):
     data = resp.json()
     resp.close()
     leds.fill((0, 0, 0))
-    return data["days"][0]
+    return data["days"][0], data.get("updated_at", "")
 
 
 # ── Display ─────────────────────────────────────────────────
@@ -157,7 +169,7 @@ def render_loading():
     _refresh()
 
 
-def render_today(day, batt):
+def render_today(day, batt, updated_at=""):
     """Render today's meal plan with large text and clean layout."""
     d = board.DISPLAY
     g = displayio.Group()
@@ -170,32 +182,30 @@ def render_today(day, batt):
     day_name = day["day"].upper()
     g.append(big_text(day_name, x=6, y=HEADER_H // 2, color=0xFFFFFF))
 
-    # Date + battery (small, white on black, right-aligned)
+    # Date + update time + battery (small, white on black, right-aligned)
     batt_s = f"{batt:.1f}v"
     if batt < LOW_BATTERY_V:
         batt_s = "!" + batt_s
-    info = f"{day['date']}   {batt_s}"
+    time_part = f" {updated_at}" if updated_at else ""
+    info = f"{day['date']}{time_part}  {batt_s}"
     g.append(Label(FONT, text=info, color=0xFFFFFF,
                    x=WIDTH - len(info) * CHAR_W - 6, y=HEADER_H // 2))
 
     y = HEADER_H + 12
 
-    # ── Dinner (2x scale when it fits, 1x fallback) ──
+    # ── Dinner (2x scale, wrap to 2 lines if needed) ──
     dinner = day["adult"]["dinner"] or "-"
     max_big = (WIDTH - 16) // (CHAR_W * 2)  # ~23 chars at 2x
     if len(dinner) <= max_big:
         g.append(big_text(dinner, x=6, y=y))
-        y += 22
+        y += 20
     else:
-        g.append(big_text(trunc(dinner, max_big), x=6, y=y))
-        y += 22
-
-    # ── Note ──
-    note = day.get("note", "")
-    if note:
-        g.append(Label(FONT, text=trunc(note, (WIDTH - 16) // CHAR_W),
-                        color=0x000000, x=8, y=y))
-        y += 13
+        # Wrap at word boundary
+        line1, line2 = word_wrap(dinner, max_big)
+        g.append(big_text(line1, x=6, y=y))
+        y += 18
+        g.append(big_text(trunc(line2, max_big) if len(line2) > max_big else line2, x=6, y=y))
+        y += 20
 
     y += 2
     g.append(hline(y))
@@ -209,7 +219,7 @@ def render_today(day, batt):
 
     g.append(Label(FONT, text="LUNCH", color=0x000000, x=c1, y=y))
     g.append(Label(FONT, text="DINNER", color=0x000000, x=c2, y=y))
-    y += 13
+    y += 11
 
     lunch_items = [v for v in [bl.get("cereal"), bl.get("fruit"), bl.get("yogurt")] if v]
     dinner_items = [v for v in [bd.get("cereal"), bd.get("fruit"), bd.get("vegetable")] if v]
@@ -221,7 +231,7 @@ def render_today(day, batt):
         if i < len(dinner_items):
             g.append(bullet(c2, y))
             g.append(Label(FONT, text=dinner_items[i], color=0x000000, x=c2 + 8, y=y))
-        y += 12
+        y += 11
 
     d.root_group = g
     _refresh()
@@ -272,8 +282,9 @@ batt = read_battery()
 print(f"Battery: {batt:.2f}V")
 
 today = None
+updated_at = ""
 try:
-    today = fetch_today(session)
+    today, updated_at = fetch_today(session)
     leds.fill((0, 0, 0))
 except Exception as e:
     leds.fill((255, 50, 0))
@@ -282,7 +293,7 @@ except Exception as e:
     time.sleep(0.5)
     deep_sleep()
 
-render_today(today, batt)
+render_today(today, batt, updated_at)
 
 # ── Button loop (C=refresh, D=sleep) ───────────────────────
 buttons = init_buttons()
@@ -309,9 +320,9 @@ while True:
         print("Refreshing data")
         flash((0, 0, 255))
         try:
-            today = fetch_today(session)
+            today, updated_at = fetch_today(session)
             batt = read_battery()
-            render_today(today, batt)
+            render_today(today, batt, updated_at)
         except Exception as e:
             print(f"Refresh error: {e}")
             render_error(e, batt)

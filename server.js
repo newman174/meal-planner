@@ -77,7 +77,7 @@ app.get('/api/schedule/current', (req, res) => {
 // Today + next 2 days
 app.get('/api/schedule/upcoming', (_req, res) => {
   const days = db.getUpcomingDays(3);
-  res.json({ days });
+  res.json({ days, updated_at: db.getEasternTimeString() });
 });
 
 app.get('/api/schedule/:weekOf', (req, res) => {

@@ -47,9 +47,42 @@ function initSchema() {
 }
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const TIMEZONE = 'America/New_York';
+
+function getEasternDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = {};
+  for (const { type, value } of formatter.formatToParts(date)) {
+    parts[type] = value;
+  }
+  return parts;
+}
+
+function getEasternNow() {
+  const str = new Date().toLocaleString('en-US', { timeZone: TIMEZONE });
+  return new Date(str);
+}
+
+function getEasternTimeString() {
+  const parts = getEasternDateParts();
+  return `${parts.hour}:${parts.minute}`;
+}
 
 function getMonday(date) {
-  const d = new Date(date);
+  const d = date instanceof Date ? getEasternNow() : new Date(date);
+  if (!(date instanceof Date)) {
+    // If a string was passed, parse it as-is
+    const parsed = new Date(date);
+    d.setFullYear(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  }
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
@@ -60,7 +93,7 @@ function getMonday(date) {
 }
 
 function getCurrentMonday() {
-  return getMonday(new Date());
+  return getMonday(getEasternNow());
 }
 
 function getOrCreateWeek(weekOf) {
@@ -150,7 +183,7 @@ function copyWeek(sourceWeekOf, targetWeekOf) {
 }
 
 function getUpcomingDays(count) {
-  const today = new Date();
+  const today = getEasternNow();
   const results = [];
   for (let i = 0; i < count; i++) {
     const d = new Date(today);
@@ -212,5 +245,5 @@ function formatWeekForApi(weekData) {
 module.exports = {
   getDb, getMonday, getCurrentMonday, getOrCreateWeek, getWeek,
   getWeekWithCreate, updateDay, listWeeks, copyWeek, deleteWeek,
-  formatWeekForApi, getUpcomingDays, DAY_NAMES
+  formatWeekForApi, getUpcomingDays, getEasternTimeString, DAY_NAMES
 };
