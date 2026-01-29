@@ -91,6 +91,11 @@ function renderWeek(weekData) {
     const card = document.createElement('div');
     card.className = 'day-card' + (day.day === todayIndex ? ' today' : '');
 
+    // Add ID to today's card for scrolling
+    if (day.day === todayIndex) {
+      card.id = 'today-card';
+    }
+
     const dateStr = addDays(currentWeekOf, day.day);
     const dateObj = new Date(dateStr + 'T00:00:00');
     const dateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -108,20 +113,20 @@ function renderWeek(weekData) {
     });
     card.appendChild(noteInput);
 
-    // Baby Lunch
-    card.appendChild(createMealSection('Baby Lunch', FIELDS.baby_lunch, day));
-    // Baby Dinner
-    card.appendChild(createMealSection('Baby Dinner', FIELDS.baby_dinner, day));
     // Adult Dinner
-    card.appendChild(createMealSection('Adult Dinner', FIELDS.adult_dinner, day));
+    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, day));
+    // Baby Lunch
+    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, day));
+    // Baby Dinner
+    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, day));
 
     container.appendChild(card);
   });
 }
 
-function createMealSection(title, fields, dayData) {
+function createMealSection(title, sectionClass, fields, dayData) {
   const section = document.createElement('div');
-  section.className = 'meal-section';
+  section.className = 'meal-section ' + sectionClass;
   section.innerHTML = `<h3>${title}</h3>`;
 
   const grid = document.createElement('div');
@@ -166,9 +171,14 @@ document.getElementById('next-week').addEventListener('click', () => {
   loadWeek();
 });
 
-document.getElementById('today-btn').addEventListener('click', () => {
+document.getElementById('today-btn').addEventListener('click', async () => {
   currentWeekOf = getMonday(new Date());
-  loadWeek();
+  await loadWeek();
+  // Scroll to today's card
+  const todayCard = document.getElementById('today-card');
+  if (todayCard) {
+    todayCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 });
 
 // Modal helpers
