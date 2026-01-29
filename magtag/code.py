@@ -123,6 +123,15 @@ def flash(color, dur=0.15):
 
 
 # ── Network ─────────────────────────────────────────────────
+def format_mac(mac_bytes):
+    """Format MAC address bytes as colon-separated hex string."""
+    return ":".join(f"{b:02X}" for b in mac_bytes)
+
+
+def get_mac():
+    return format_mac(wifi.radio.mac_address)
+
+
 def connect():
     if wifi.radio.connected:
         return
@@ -158,13 +167,17 @@ def _refresh():
         pass
 
 
-def render_loading():
+def render_loading(mac="", ip=""):
     d = board.DISPLAY
     g = displayio.Group()
     g.append(white_bg())
     g.append(black_bar(WIDTH, HEADER_H))
     g.append(Label(FONT, text="MEAL PLANNER", color=0xFFFFFF, x=8, y=HEADER_H // 2))
     g.append(Label(FONT, text="Connecting...", color=0x000000, x=8, y=HEADER_H + 20))
+    if mac:
+        g.append(Label(FONT, text=f"MAC: {mac}", color=0x000000, x=8, y=HEADER_H + 36))
+    if ip:
+        g.append(Label(FONT, text=f"IP:  {ip}", color=0x000000, x=8, y=HEADER_H + 52))
     d.root_group = g
     _refresh()
 
@@ -272,8 +285,13 @@ def deep_sleep():
 
 
 # ── Main ────────────────────────────────────────────────────
-render_loading()
+mac = get_mac()
+print(f"MAC: {mac}")
+render_loading(mac=mac)
 connect()
+ip = str(wifi.radio.ipv4_address)
+print(f"IP:  {ip}")
+render_loading(mac=mac, ip=ip)
 
 pool = socketpool.SocketPool(wifi.radio)
 session = adafruit_requests.Session(pool)
