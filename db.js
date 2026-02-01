@@ -139,7 +139,7 @@ function updateDay(weekOf, dayIndex, fields) {
   const setClauses = [];
   const values = [];
   for (const [key, value] of Object.entries(fields)) {
-    if (allowed.includes(key)) {
+    if (allowed.includes(key) && typeof value === 'string') {
       setClauses.push(`${key} = ?`);
       values.push(value);
     }

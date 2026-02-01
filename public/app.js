@@ -58,16 +58,44 @@ function getTodayDayIndex() {
 }
 
 async function fetchWeek(weekOf) {
-  const res = await fetch(`/api/weeks/${weekOf}`);
-  return res.json();
+  try {
+    const res = await fetch(`/api/weeks/${weekOf}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch week: ${res.status}`);
+    }
+    return res.json();
+  } catch (err) {
+    console.error('Error fetching week:', err);
+    showError('Failed to load week data. Please try again.');
+    throw err;
+  }
+}
+
+function showError(message) {
+  const existing = document.querySelector('.error-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'error-toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
 }
 
 async function saveField(weekOf, dayIndex, field, value) {
-  await fetch(`/api/weeks/${weekOf}/days/${dayIndex}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ [field]: value }),
-  });
+  try {
+    const res = await fetch(`/api/weeks/${weekOf}/days/${dayIndex}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to save: ${res.status}`);
+    }
+  } catch (err) {
+    console.error('Error saving field:', err);
+    showError('Failed to save changes. Please try again.');
+  }
 }
 
 function debouncedSave(input, weekOf, dayIndex, field) {
@@ -156,8 +184,13 @@ function createMealSection(title, sectionClass, fields, dayData) {
 }
 
 async function loadWeek() {
-  const data = await fetchWeek(currentWeekOf);
-  renderWeek(data);
+  try {
+    const data = await fetchWeek(currentWeekOf);
+    renderWeek(data);
+  } catch {
+    // Error already shown by fetchWeek
+    return;
+  }
 }
 
 // Navigation
@@ -182,9 +215,15 @@ document.getElementById('today-btn').addEventListener('click', async () => {
 });
 
 // Modal helpers
-function showModal(title, contentHtml) {
+function showModal(title, content) {
   document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML = contentHtml;
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '';
+  if (typeof content === 'string') {
+    body.textContent = content;
+  } else {
+    body.appendChild(content);
+  }
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
@@ -199,67 +238,116 @@ document.getElementById('modal-overlay').addEventListener('click', (e) => {
 
 // History
 document.getElementById('history-btn').addEventListener('click', async () => {
-  const weeks = await (await fetch('/api/weeks')).json();
-  if (weeks.length === 0) {
-    showModal('History', '<p style="color:#888">No saved weeks yet.</p>');
-    return;
+  try {
+    const res = await fetch('/api/weeks');
+    if (!res.ok) {
+      throw new Error(`Failed to fetch history: ${res.status}`);
+    }
+    const weeks = await res.json();
+    if (weeks.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.style.color = '#888';
+      emptyMsg.textContent = 'No saved weeks yet.';
+      showModal('History', emptyMsg);
+      return;
+    }
+    const ul = document.createElement('ul');
+    ul.className = 'week-list';
+    weeks.forEach((w) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.textContent = formatWeekLabel(w.week_of);
+      const btn = document.createElement('button');
+      btn.textContent = 'View';
+      btn.addEventListener('click', () => {
+        currentWeekOf = w.week_of;
+        hideModal();
+        loadWeek();
+      });
+      li.appendChild(span);
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+    showModal('History', ul);
+  } catch (err) {
+    console.error('Error loading history:', err);
+    showError('Failed to load history. Please try again.');
   }
-  const items = weeks.map((w) => {
-    const label = formatWeekLabel(w.week_of);
-    return `<li>
-      <span>${label}</span>
-      <button onclick="navigateToWeek('${w.week_of}')">View</button>
-    </li>`;
-  }).join('');
-  showModal('History', `<ul class="week-list">${items}</ul>`);
 });
-
-window.navigateToWeek = function (weekOf) {
-  currentWeekOf = weekOf;
-  hideModal();
-  loadWeek();
-};
 
 // Copy Week
 document.getElementById('copy-btn').addEventListener('click', async () => {
-  const weeks = await (await fetch('/api/weeks')).json();
-  const options = weeks.map((w) => {
-    const label = formatWeekLabel(w.week_of);
-    return `<option value="${w.week_of}">${label}</option>`;
-  }).join('');
+  try {
+    const res = await fetch('/api/weeks');
+    if (!res.ok) {
+      throw new Error(`Failed to fetch weeks: ${res.status}`);
+    }
+    const weeks = await res.json();
 
-  const nextMonday = addDays(currentWeekOf, 7);
+    const form = document.createElement('div');
+    form.className = 'copy-form';
 
-  showModal('Copy Week', `
-    <div class="copy-form">
-      <div>
-        <label>Copy from:</label>
-        <select id="copy-source">${options}</select>
-      </div>
-      <div>
-        <label>Copy to (pick any Monday):</label>
-        <input type="date" id="copy-target" value="${nextMonday}">
-      </div>
-      <button class="btn-primary" onclick="executeCopy()">Copy</button>
-    </div>
-  `);
+    const sourceDiv = document.createElement('div');
+    const sourceLabel = document.createElement('label');
+    sourceLabel.textContent = 'Copy from:';
+    const sourceSelect = document.createElement('select');
+    sourceSelect.id = 'copy-source';
+    weeks.forEach((w) => {
+      const opt = document.createElement('option');
+      opt.value = w.week_of;
+      opt.textContent = formatWeekLabel(w.week_of);
+      sourceSelect.appendChild(opt);
+    });
+    sourceDiv.appendChild(sourceLabel);
+    sourceDiv.appendChild(sourceSelect);
+
+    const targetDiv = document.createElement('div');
+    const targetLabel = document.createElement('label');
+    targetLabel.textContent = 'Copy to (pick any Monday):';
+    const targetInput = document.createElement('input');
+    targetInput.type = 'date';
+    targetInput.id = 'copy-target';
+    targetInput.value = addDays(currentWeekOf, 7);
+    targetDiv.appendChild(targetLabel);
+    targetDiv.appendChild(targetInput);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn-primary';
+    copyBtn.textContent = 'Copy';
+    copyBtn.addEventListener('click', async () => {
+      try {
+        const source = sourceSelect.value;
+        const targetRaw = targetInput.value;
+        const target = getMonday(new Date(targetRaw + 'T00:00:00'));
+
+        const copyRes = await fetch(`/api/weeks/${source}/copy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetWeekOf: target }),
+        });
+        if (!copyRes.ok) {
+          throw new Error(`Failed to copy: ${copyRes.status}`);
+        }
+
+        currentWeekOf = target;
+        hideModal();
+        loadWeek();
+      } catch (err) {
+        console.error('Error copying week:', err);
+        showError('Failed to copy week. Please try again.');
+      }
+    });
+
+    form.appendChild(sourceDiv);
+    form.appendChild(targetDiv);
+    form.appendChild(copyBtn);
+
+    showModal('Copy Week', form);
+  } catch (err) {
+    console.error('Error loading copy dialog:', err);
+    showError('Failed to load copy dialog. Please try again.');
+  }
 });
-
-window.executeCopy = async function () {
-  const source = document.getElementById('copy-source').value;
-  const targetRaw = document.getElementById('copy-target').value;
-  const target = getMonday(new Date(targetRaw + 'T00:00:00'));
-
-  await fetch(`/api/weeks/${source}/copy`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetWeekOf: target }),
-  });
-
-  currentWeekOf = target;
-  hideModal();
-  loadWeek();
-};
 
 // Init
 loadWeek();
