@@ -219,18 +219,6 @@ function debouncedSave(input, weekOf, dayIndex, field) {
 }
 
 /**
- * Escapes HTML special characters to prevent XSS.
- * Used when inserting text that might contain user input.
- * @param {string} text - Text to escape
- * @returns {string} Escaped text safe for HTML
- */
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/**
  * Renders the week view with all day cards.
  * Uses safe DOM manipulation to prevent XSS.
  * @param {Object} weekData - Week data from API
