@@ -2,10 +2,10 @@
   "name": "meal-planner",
   "version": "1.0.0",
   "description": "Simple weekly meal planner for baby and adult meals",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "seed": "node seed.js",
+    "start": "node src/server.js",
+    "seed": "node scripts/seed.js",
     "deploy": "rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' ./ root@192.168.50.193:~/meal-planner/"
   },
   "dependencies": {

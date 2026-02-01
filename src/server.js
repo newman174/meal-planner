@@ -10,26 +10,11 @@ const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const config = require('./config');
 const db = require('./db');
 const logger = require('./logger');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-/**
- * Server configuration constants
- * @constant {Object}
- */
-const CONFIG = {
-  /** Maximum size for JSON request bodies */
-  MAX_JSON_BODY_SIZE: '10kb',
-  /** Rate limiting window in milliseconds (15 minutes) */
-  RATE_LIMIT_WINDOW_MS: 15 * 60 * 1000,
-  /** Maximum read requests per window */
-  RATE_LIMIT_READ_MAX: 500,
-  /** Maximum write requests per window */
-  RATE_LIMIT_WRITE_MAX: 100
-};
 
 /**
  * API key for write operations.
@@ -44,7 +29,7 @@ if (!API_KEY) {
 }
 
 // Middleware setup
-app.use(express.json({ limit: CONFIG.MAX_JSON_BODY_SIZE }));
+app.use(express.json({ limit: config.maxJsonBodySize }));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -62,8 +47,8 @@ app.use(helmet({
  * Allows more requests than write operations.
  */
 const readLimiter = rateLimit({
-  windowMs: CONFIG.RATE_LIMIT_WINDOW_MS,
-  max: CONFIG.RATE_LIMIT_READ_MAX,
+  windowMs: config.rateLimitWindowMs,
+  max: config.rateLimitReadMax,
   message: { error: 'Too many requests, please try again later' }
 });
 
@@ -72,8 +57,8 @@ const readLimiter = rateLimit({
  * More restrictive than read limiter.
  */
 const writeLimiter = rateLimit({
-  windowMs: CONFIG.RATE_LIMIT_WINDOW_MS,
-  max: CONFIG.RATE_LIMIT_WRITE_MAX,
+  windowMs: config.rateLimitWindowMs,
+  max: config.rateLimitWriteMax,
   message: { error: 'Too many requests, please try again later' }
 });
 
@@ -149,7 +134,7 @@ function requireApiKey(req, res, next) {
 app.use(logger.requestMiddleware);
 
 // Static files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(config.paths.public(__dirname)));
 
 // --- App API routes ---
 
@@ -348,8 +333,8 @@ app.use((err, req, res, _next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  logger.info({ port: PORT }, 'Meal Planner server started');
+app.listen(config.port, () => {
+  logger.info({ port: config.port }, 'Meal Planner server started');
   if (API_KEY) {
     logger.info('API key authentication enabled for write operations');
   }

@@ -6,10 +6,10 @@
  */
 
 const Database = require('better-sqlite3');
-const path = require('path');
+const config = require('./config');
 const logger = require('./logger');
 
-const DB_PATH = path.join(__dirname, 'meals.db');
+const DB_PATH = config.paths.db(__dirname);
 
 /** @type {Database.Database|null} */
 let db = null;
@@ -77,16 +77,8 @@ function initSchema() {
 /** Day names indexed by day number (0 = Monday, 6 = Sunday) */
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-/** IANA timezone identifier for all date calculations */
-const TIMEZONE = 'America/New_York';
-
 /** Number of days in a week */
 const DAYS_PER_WEEK = 7;
-
-// Configuration constants
-const MAX_FIELD_LENGTH = 500;
-const MAX_NOTE_LENGTH = 1000;
-const MAX_WEEKS_RETURNED = 52;
 
 /**
  * Whitelist mapping of user input field names to database column names.
@@ -114,7 +106,7 @@ const ALLOWED_DAY_FIELDS = {
  */
 function getEasternDateParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMEZONE,
+    timeZone: config.timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -134,7 +126,7 @@ function getEasternDateParts(date = new Date()) {
  * @returns {Date} Date object representing current Eastern time
  */
 function getEasternNow() {
-  const str = new Date().toLocaleString('en-US', { timeZone: TIMEZONE });
+  const str = new Date().toLocaleString('en-US', { timeZone: config.timezone });
   return new Date(str);
 }
 
@@ -269,7 +261,7 @@ function updateDay(weekOf, dayIndex, fields) {
     const columnName = ALLOWED_DAY_FIELDS[key];  // Safe lookup - only mapped values used
     if (columnName && typeof value === 'string') {
       // Enforce max length to prevent database bloat
-      const maxLen = key === 'note' ? MAX_NOTE_LENGTH : MAX_FIELD_LENGTH;
+      const maxLen = key === 'note' ? config.maxNoteLength : config.maxFieldLength;
       const truncated = value.slice(0, maxLen);
       setClauses.push(`${columnName} = ?`);  // Uses mapped value, not user input
       values.push(truncated);
@@ -291,7 +283,7 @@ function updateDay(weekOf, dayIndex, fields) {
  */
 function listWeeks() {
   const database = getDb();
-  return database.prepare('SELECT * FROM weeks ORDER BY week_of DESC LIMIT ?').all(MAX_WEEKS_RETURNED);
+  return database.prepare('SELECT * FROM weeks ORDER BY week_of DESC LIMIT ?').all(config.maxWeeksReturned);
 }
 
 /**

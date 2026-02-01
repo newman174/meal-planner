@@ -13,18 +13,23 @@ A weekly meal planning app for tracking baby and adult meals, with a web interfa
 
 ```
 meal-planner/
-├── server.js          # Express server with API routes
-├── db.js              # Database layer (SQLite)
-├── seed.js            # Database seeder script
-├── meals.db           # SQLite database file
-├── public/            # Frontend static files
-│   ├── index.html     # Main HTML page
-│   ├── app.js         # Frontend JavaScript (vanilla)
-│   ├── style.css      # Styles (modern gradient design)
-│   └── favicon.svg    # App icon
-├── magtag/            # MagTag e-ink display code
-│   ├── code.py        # CircuitPython code for MagTag
-│   └── settings.toml  # WiFi/server config
+├── src/                    # Server-side source code
+│   ├── server.js           # Express server entry point
+│   ├── db.js               # Database layer (SQLite)
+│   ├── logger.js           # Structured logging module
+│   └── config.js           # Centralized configuration
+├── scripts/                # Utility scripts
+│   └── seed.js             # Database seeder
+├── public/                 # Frontend static files
+│   ├── index.html          # Main HTML page
+│   ├── app.js              # Frontend JavaScript (vanilla)
+│   ├── style.css           # Styles (modern gradient design)
+│   └── favicon.svg         # App icon
+├── magtag/                 # MagTag e-ink display code
+│   ├── code.py             # CircuitPython code for MagTag
+│   └── settings.toml       # WiFi/server config
+├── logs/                   # Log files (production)
+├── meals.db                # SQLite database file
 └── package.json
 ```
 

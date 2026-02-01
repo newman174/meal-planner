@@ -7,11 +7,12 @@
 const pino = require('pino');
 const path = require('path');
 const fs = require('fs');
+const config = require('./config');
 
-// Configuration
-const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, 'logs');
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
-const NODE_ENV = process.env.NODE_ENV || 'development';
+// Configuration from centralized config
+const LOG_DIR = config.paths.logs(__dirname);
+const LOG_LEVEL = config.logLevel;
+const NODE_ENV = config.nodeEnv;
 
 // Ensure log directory exists
 if (!fs.existsSync(LOG_DIR)) {

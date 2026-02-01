@@ -1,4 +1,4 @@
-const db = require('./db');
+const db = require('../src/db');
 
 const weekOf = db.getCurrentMonday();
 console.log(`Seeding week of ${weekOf}...`);
