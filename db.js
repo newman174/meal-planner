@@ -61,6 +61,9 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_days_week_id ON days(week_id);
+    -- UNIQUE constraint creates implicit index, but explicit index ensures clarity
+    -- and optimal query planning for frequent week_of lookups
+    CREATE INDEX IF NOT EXISTS idx_weeks_week_of ON weeks(week_of);
   `);
 
   // Migrate: rename adult_dinner_note → note if the old column exists
