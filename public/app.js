@@ -1,4 +1,30 @@
+/**
+ * @fileoverview Frontend JavaScript for the Meal Planner application.
+ * Provides UI interactions for viewing and editing weekly meal plans.
+ * Uses vanilla JavaScript with no frameworks.
+ * @module app
+ */
+
+/** Day names indexed by day number (0 = Monday, 6 = Sunday) */
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+// Configuration constants
+/** Delay before saving after user stops typing (ms) */
+const DEBOUNCE_DELAY_MS = 400;
+/** Duration to show green border feedback after save (ms) */
+const SAVE_FEEDBACK_DURATION_MS = 600;
+/** Duration to show error toast messages (ms) */
+const ERROR_TOAST_DURATION_MS = 5000;
+/** Maximum length for regular input fields */
+const MAX_FIELD_LENGTH = 500;
+/** Maximum length for note fields */
+const MAX_NOTE_LENGTH = 1000;
+
+/**
+ * Field definitions for meal sections.
+ * Organized by meal type with field keys and display labels.
+ * @constant {Object}
+ */
 const FIELDS = {
   baby_lunch: [
     { key: 'baby_lunch_cereal', label: 'Cereal' },
@@ -15,17 +41,31 @@ const FIELDS = {
   ],
 };
 
+/** Currently displayed week (Monday date in YYYY-MM-DD format) */
 let currentWeekOf = getMonday(new Date());
+
+/** Map of timer IDs for debounced saves, keyed by "dayIndex-fieldKey" */
 let saveTimers = {};
 
+/**
+ * Calculates the Monday of the week containing the given date.
+ * @param {Date} date - A Date object
+ * @returns {string} The Monday date in YYYY-MM-DD format
+ */
 function getMonday(date) {
   const d = new Date(date);
   const day = d.getDay();
+  // Convert Sunday (0) to -6, otherwise 1-day to get Monday
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   return formatDate(d);
 }
 
+/**
+ * Formats a Date object as YYYY-MM-DD string.
+ * @param {Date} d - Date object to format
+ * @returns {string} Formatted date string
+ */
 function formatDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -33,12 +73,23 @@ function formatDate(d) {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Adds days to a date string.
+ * @param {string} dateStr - Date in YYYY-MM-DD format
+ * @param {number} n - Number of days to add (can be negative)
+ * @returns {string} New date in YYYY-MM-DD format
+ */
 function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + n);
   return formatDate(d);
 }
 
+/**
+ * Formats a week date range for display (e.g., "Jan 15 – Jan 21, 2024").
+ * @param {string} weekOf - Monday date in YYYY-MM-DD format
+ * @returns {string} Formatted date range string
+ */
 function formatWeekLabel(weekOf) {
   const start = new Date(weekOf + 'T00:00:00');
   const end = new Date(start);
@@ -49,6 +100,11 @@ function formatWeekLabel(weekOf) {
   return `${startStr} – ${endStr}`;
 }
 
+/**
+ * Gets the day index (0-6) for today if viewing the current week.
+ * Returns -1 if viewing a different week.
+ * @returns {number} Today's day index or -1
+ */
 function getTodayDayIndex() {
   const today = new Date();
   const todayMonday = getMonday(today);
@@ -57,6 +113,12 @@ function getTodayDayIndex() {
   return day === 0 ? 6 : day - 1;
 }
 
+/**
+ * Fetches week data from the API.
+ * @param {string} weekOf - Monday date in YYYY-MM-DD format
+ * @returns {Promise<Object>} Week data with days array
+ * @throws {Error} If fetch fails
+ */
 async function fetchWeek(weekOf) {
   try {
     const res = await fetch(`/api/weeks/${weekOf}`);
@@ -71,6 +133,11 @@ async function fetchWeek(weekOf) {
   }
 }
 
+/**
+ * Displays an error toast message.
+ * Removes any existing toast first.
+ * @param {string} message - Error message to display
+ */
 function showError(message) {
   const existing = document.querySelector('.error-toast');
   if (existing) existing.remove();
@@ -79,9 +146,27 @@ function showError(message) {
   toast.className = 'error-toast';
   toast.textContent = message;
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 5000);
+  setTimeout(() => toast.remove(), ERROR_TOAST_DURATION_MS);
 }
 
+/**
+ * Validates a date string is parseable.
+ * @param {string} dateStr - Date string to validate
+ * @returns {boolean} True if valid date
+ */
+function isValidDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return !isNaN(d.getTime());
+}
+
+/**
+ * Saves a single field value to the API.
+ * @param {string} weekOf - Monday date in YYYY-MM-DD format
+ * @param {number} dayIndex - Day index (0-6)
+ * @param {string} field - Field key to update
+ * @param {string} value - New value
+ * @returns {Promise<boolean>} True if save succeeded
+ */
 async function saveField(weekOf, dayIndex, field, value) {
   try {
     const res = await fetch(`/api/weeks/${weekOf}/days/${dayIndex}`, {
@@ -92,25 +177,71 @@ async function saveField(weekOf, dayIndex, field, value) {
     if (!res.ok) {
       throw new Error(`Failed to save: ${res.status}`);
     }
+    return true;
   } catch (err) {
     console.error('Error saving field:', err);
     showError('Failed to save changes. Please try again.');
+    return false;
   }
 }
 
+/**
+ * Clears all pending save timers.
+ * Should be called before navigating to a new week.
+ */
+function clearAllSaveTimers() {
+  Object.values(saveTimers).forEach(clearTimeout);
+  saveTimers = {};
+}
+
+/**
+ * Schedules a debounced save for an input field.
+ * Cancels any pending save for the same field.
+ * @param {HTMLInputElement} input - The input element
+ * @param {string} weekOf - Monday date in YYYY-MM-DD format
+ * @param {number} dayIndex - Day index (0-6)
+ * @param {string} field - Field key
+ */
 function debouncedSave(input, weekOf, dayIndex, field) {
   const timerId = `${dayIndex}-${field}`;
   clearTimeout(saveTimers[timerId]);
   saveTimers[timerId] = setTimeout(async () => {
     input.classList.add('saving');
-    await saveField(weekOf, dayIndex, field, input.value);
-    setTimeout(() => input.classList.remove('saving'), 600);
-  }, 400);
+    const success = await saveField(weekOf, dayIndex, field, input.value);
+    if (success) {
+      setTimeout(() => input.classList.remove('saving'), SAVE_FEEDBACK_DURATION_MS);
+    } else {
+      input.classList.remove('saving');
+      input.classList.add('error');
+      setTimeout(() => input.classList.remove('error'), SAVE_FEEDBACK_DURATION_MS);
+    }
+  }, DEBOUNCE_DELAY_MS);
 }
 
+/**
+ * Escapes HTML special characters to prevent XSS.
+ * Used when inserting text that might contain user input.
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text safe for HTML
+ */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
+ * Renders the week view with all day cards.
+ * Uses safe DOM manipulation to prevent XSS.
+ * @param {Object} weekData - Week data from API
+ */
 function renderWeek(weekData) {
   const container = document.getElementById('week-view');
-  container.innerHTML = '';
+  // Clear container safely
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
+
   document.getElementById('week-label').textContent = formatWeekLabel(currentWeekOf);
 
   const todayIndex = getTodayDayIndex();
@@ -128,7 +259,14 @@ function renderWeek(weekData) {
     const dateObj = new Date(dateStr + 'T00:00:00');
     const dateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-    card.innerHTML = `<h2>${DAY_NAMES[day.day]} <span class="day-date">${dateLabel}</span></h2>`;
+    // Create header using safe DOM methods (prevents XSS)
+    const header = document.createElement('h2');
+    header.textContent = DAY_NAMES[day.day] + ' ';
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'day-date';
+    dateSpan.textContent = dateLabel;
+    header.appendChild(dateSpan);
+    card.appendChild(header);
 
     // Day-level note
     const noteInput = document.createElement('input');
@@ -136,6 +274,7 @@ function renderWeek(weekData) {
     noteInput.className = 'day-note';
     noteInput.value = day.note || '';
     noteInput.placeholder = 'Add a note...';
+    noteInput.maxLength = MAX_NOTE_LENGTH;
     noteInput.addEventListener('input', () => {
       debouncedSave(noteInput, currentWeekOf, day.day, 'note');
     });
@@ -152,10 +291,23 @@ function renderWeek(weekData) {
   });
 }
 
+/**
+ * Creates a meal section element with title and input fields.
+ * Uses safe DOM manipulation to prevent XSS.
+ * @param {string} title - Section title (e.g., "Adult Dinner")
+ * @param {string} sectionClass - CSS class for the section
+ * @param {Array<Object>} fields - Field definitions
+ * @param {Object} dayData - Day data from API
+ * @returns {HTMLElement} The section element
+ */
 function createMealSection(title, sectionClass, fields, dayData) {
   const section = document.createElement('div');
   section.className = 'meal-section ' + sectionClass;
-  section.innerHTML = `<h3>${title}</h3>`;
+
+  // Create h3 using safe DOM method (prevents XSS)
+  const h3 = document.createElement('h3');
+  h3.textContent = title;
+  section.appendChild(h3);
 
   const grid = document.createElement('div');
   grid.className = 'meal-fields';
@@ -170,6 +322,7 @@ function createMealSection(title, sectionClass, fields, dayData) {
     input.id = `${dayData.day}-${f.key}`;
     input.value = dayData[f.key] || '';
     input.placeholder = f.label;
+    input.maxLength = MAX_FIELD_LENGTH;
 
     input.addEventListener('input', () => {
       debouncedSave(input, currentWeekOf, dayData.day, f.key);
@@ -183,7 +336,14 @@ function createMealSection(title, sectionClass, fields, dayData) {
   return section;
 }
 
+/**
+ * Loads and renders the current week.
+ * Clears pending save timers before loading.
+ */
 async function loadWeek() {
+  // Clear any pending saves from the previous week
+  clearAllSaveTimers();
+
   try {
     const data = await fetchWeek(currentWeekOf);
     renderWeek(data);
@@ -193,7 +353,7 @@ async function loadWeek() {
   }
 }
 
-// Navigation
+// Navigation event handlers
 document.getElementById('prev-week').addEventListener('click', () => {
   currentWeekOf = addDays(currentWeekOf, -7);
   loadWeek();
@@ -214,11 +374,18 @@ document.getElementById('today-btn').addEventListener('click', async () => {
   }
 });
 
-// Modal helpers
+/**
+ * Shows a modal dialog with the given title and content.
+ * @param {string} title - Modal title
+ * @param {string|HTMLElement} content - Text string or DOM element
+ */
 function showModal(title, content) {
   document.getElementById('modal-title').textContent = title;
   const body = document.getElementById('modal-body');
-  body.innerHTML = '';
+  // Clear body safely
+  while (body.firstChild) {
+    body.removeChild(body.firstChild);
+  }
   if (typeof content === 'string') {
     body.textContent = content;
   } else {
@@ -227,6 +394,9 @@ function showModal(title, content) {
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
+/**
+ * Hides the modal dialog.
+ */
 function hideModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
 }
@@ -236,7 +406,7 @@ document.getElementById('modal-overlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) hideModal();
 });
 
-// History
+// History button handler
 document.getElementById('history-btn').addEventListener('click', async () => {
   try {
     const res = await fetch('/api/weeks');
@@ -275,7 +445,7 @@ document.getElementById('history-btn').addEventListener('click', async () => {
   }
 });
 
-// Copy Week
+// Copy Week button handler
 document.getElementById('copy-btn').addEventListener('click', async () => {
   try {
     const res = await fetch('/api/weeks');
@@ -318,6 +488,12 @@ document.getElementById('copy-btn').addEventListener('click', async () => {
       try {
         const source = sourceSelect.value;
         const targetRaw = targetInput.value;
+
+        if (!targetRaw || !isValidDate(targetRaw)) {
+          showError('Please select a valid date.');
+          return;
+        }
+
         const target = getMonday(new Date(targetRaw + 'T00:00:00'));
 
         const copyRes = await fetch(`/api/weeks/${source}/copy`, {
@@ -349,5 +525,5 @@ document.getElementById('copy-btn').addEventListener('click', async () => {
   }
 });
 
-// Init
+// Initialize the app
 loadWeek();
