@@ -4,13 +4,14 @@
  * @module logger
  */
 
-const pino = require('pino');
-const path = require('path');
-const fs = require('fs');
-const config = require('./config');
+import pino, { Logger, TransportSingleOptions } from 'pino';
+import path from 'path';
+import fs from 'fs';
+import type { Request, Response, NextFunction } from 'express';
+import config from './config.js';
 
 // Configuration from centralized config
-const LOG_DIR = config.paths.logs(__dirname);
+const LOG_DIR = config.paths.logs(import.meta.dirname);
 const LOG_LEVEL = config.logLevel;
 const NODE_ENV = config.nodeEnv;
 
@@ -23,9 +24,8 @@ if (!fs.existsSync(LOG_DIR)) {
  * Create pino transport configuration based on environment.
  * In development: pretty print to console.
  * In production: JSON to file with rotation support.
- * @returns {object} Pino transport configuration
  */
-function getTransport() {
+function getTransport(): TransportSingleOptions {
   if (NODE_ENV === 'development') {
     return {
       target: 'pino-pretty',
@@ -53,55 +53,54 @@ function getTransport() {
 /**
  * Base logger configuration
  */
-const baseConfig = {
+const baseConfig: pino.LoggerOptions = {
   level: LOG_LEVEL,
   base: {
     env: NODE_ENV
   },
   timestamp: pino.stdTimeFunctions.isoTime,
   formatters: {
-    level: (label) => ({ level: label })
+    level: (label: string) => ({ level: label })
   }
 };
+
+/** Extended logger interface with custom methods */
+interface CustomLogger extends Logger {
+  createChild: (bindings: pino.Bindings) => Logger;
+  requestMiddleware: (req: Request, res: Response, next: NextFunction) => void;
+}
 
 /**
  * Create the logger instance.
  * Falls back to basic console transport if pino-pretty/pino-roll not available.
  */
-let logger;
+let logger: CustomLogger;
 
 try {
-  logger = pino(baseConfig, pino.transport(getTransport()));
+  logger = pino(baseConfig, pino.transport(getTransport())) as CustomLogger;
 } catch (err) {
   // Fallback if transport modules not installed
   logger = pino({
     ...baseConfig,
     transport: undefined
-  });
-  logger.warn({ err: err.message }, 'Using basic logger - install pino-pretty (dev) or pino-roll (prod) for better output');
+  }) as CustomLogger;
+  const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+  logger.warn({ err: errorMessage }, 'Using basic logger - install pino-pretty (dev) or pino-roll (prod) for better output');
 }
 
 /**
  * Create a child logger with additional context.
  * Useful for adding request-specific or module-specific context.
- * @param {object} bindings - Key-value pairs to include in all log entries
- * @returns {pino.Logger} Child logger instance
- * @example
- * const reqLogger = logger.child({ requestId: 'abc123' });
- * reqLogger.info('Processing request');
  */
-logger.createChild = function(bindings) {
+logger.createChild = function(this: Logger, bindings: pino.Bindings): Logger {
   return this.child(bindings);
 };
 
 /**
  * Express middleware for request logging.
  * Logs method, URL, status code, and response time.
- * @param {object} req - Express request object
- * @param {object} res - Express response object
- * @param {function} next - Next middleware function
  */
-logger.requestMiddleware = function(req, res, next) {
+logger.requestMiddleware = function(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
   const requestId = Math.random().toString(36).substring(2, 10);
 
@@ -131,19 +130,4 @@ logger.requestMiddleware = function(req, res, next) {
   next();
 };
 
-/**
- * Log levels available:
- * - trace: Very detailed debugging information
- * - debug: Debugging information
- * - info: General information about application state
- * - warn: Warning conditions that should be addressed
- * - error: Error conditions
- * - fatal: Critical errors causing shutdown
- *
- * @example
- * logger.info({ userId: 123 }, 'User logged in');
- * logger.error({ err }, 'Database connection failed');
- * logger.warn({ weekOf: '2024-01-01' }, 'Week not found');
- */
-
-module.exports = logger;
+export default logger;

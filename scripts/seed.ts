@@ -1,11 +1,23 @@
-const db = require('../src/db');
+import * as db from '../src/db.js';
 
 const weekOf = db.getCurrentMonday();
 console.log(`Seeding week of ${weekOf}...`);
 
 db.getOrCreateWeek(weekOf);
 
-const meals = [
+interface MealData {
+  day: number;
+  baby_lunch_cereal: string;
+  baby_lunch_yogurt: string;
+  baby_lunch_fruit: string;
+  baby_dinner_cereal: string;
+  baby_dinner_fruit: string;
+  baby_dinner_vegetable: string;
+  adult_dinner: string;
+  note: string;
+}
+
+const meals: MealData[] = [
   { // Monday
     day: 0,
     baby_lunch_cereal: 'Oat',

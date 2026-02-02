@@ -5,22 +5,29 @@
  * @module db
  */
 
-const Database = require('better-sqlite3');
-const config = require('./config');
-const logger = require('./logger');
+import Database from 'better-sqlite3';
+import config from './config.js';
+import logger from './logger.js';
+import type {
+  WeekRecord,
+  DayRecord,
+  WeekWithDays,
+  FormattedWeek,
+  UpcomingDay,
+  DayFieldKey,
+  DateParts
+} from './types/index.js';
 
-const DB_PATH = config.paths.db(__dirname);
+const DB_PATH = config.paths.db(import.meta.dirname);
 
-/** @type {Database.Database|null} */
-let db = null;
+let db: Database.Database | null = null;
 
 /**
  * Gets or initializes the database connection.
  * Creates the database file if it doesn't exist and initializes the schema.
  * Uses WAL mode for better concurrent read/write performance.
- * @returns {Database.Database} The SQLite database instance
  */
-function getDb() {
+function getDb(): Database.Database {
   if (!db) {
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
@@ -31,13 +38,23 @@ function getDb() {
   return db;
 }
 
+/** Column info from pragma table_info */
+interface ColumnInfo {
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
+}
+
 /**
  * Initializes the database schema.
  * Creates weeks and days tables if they don't exist.
  * Handles migration from legacy column names.
- * @private
  */
-function initSchema() {
+function initSchema(): void {
+  if (!db) return;
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS weeks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,13 +78,11 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_days_week_id ON days(week_id);
-    -- UNIQUE constraint creates implicit index, but explicit index ensures clarity
-    -- and optimal query planning for frequent week_of lookups
     CREATE INDEX IF NOT EXISTS idx_weeks_week_of ON weeks(week_of);
   `);
 
   // Migrate: rename adult_dinner_note → note if the old column exists
-  const cols = db.pragma('table_info(days)').map(c => c.name);
+  const cols = (db.pragma('table_info(days)') as ColumnInfo[]).map(c => c.name);
   if (cols.includes('adult_dinner_note')) {
     db.exec('ALTER TABLE days RENAME COLUMN adult_dinner_note TO note');
     logger.info('Migrated adult_dinner_note column to note');
@@ -75,7 +90,7 @@ function initSchema() {
 }
 
 /** Day names indexed by day number (0 = Monday, 6 = Sunday) */
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 
 /** Number of days in a week */
 const DAYS_PER_WEEK = 7;
@@ -83,11 +98,9 @@ const DAYS_PER_WEEK = 7;
 /**
  * Whitelist mapping of user input field names to database column names.
  * This prevents SQL injection by ensuring only valid, pre-defined column
- * names are used in dynamic queries. Keys are validated user input,
- * values are the actual database column names.
- * @constant {Object.<string, string>}
+ * names are used in dynamic queries.
  */
-const ALLOWED_DAY_FIELDS = {
+const ALLOWED_DAY_FIELDS: Record<DayFieldKey, string> = {
   'baby_lunch_cereal': 'baby_lunch_cereal',
   'baby_lunch_fruit': 'baby_lunch_fruit',
   'baby_lunch_yogurt': 'baby_lunch_yogurt',
@@ -101,10 +114,8 @@ const ALLOWED_DAY_FIELDS = {
 /**
  * Parses a date into its component parts in Eastern timezone.
  * Uses Intl.DateTimeFormat for reliable timezone conversion.
- * @param {Date} [date=new Date()] - The date to parse
- * @returns {Object} Object with year, month, day, hour, minute properties
  */
-function getEasternDateParts(date = new Date()) {
+function getEasternDateParts(date: Date = new Date()): DateParts {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: config.timezone,
     year: 'numeric',
@@ -114,7 +125,7 @@ function getEasternDateParts(date = new Date()) {
     minute: '2-digit',
     hour12: false
   });
-  const parts = {};
+  const parts: DateParts = { year: '', month: '', day: '', hour: '', minute: '' };
   for (const { type, value } of formatter.formatToParts(date)) {
     parts[type] = value;
   }
@@ -123,20 +134,16 @@ function getEasternDateParts(date = new Date()) {
 
 /**
  * Gets the current date/time adjusted to Eastern timezone.
- * @returns {Date} Date object representing current Eastern time
  */
-function getEasternNow() {
+function getEasternNow(): Date {
   const str = new Date().toLocaleString('en-US', { timeZone: config.timezone });
   return new Date(str);
 }
 
 /**
  * Gets the current time as a string in HH:MM format (Eastern timezone).
- * @returns {string} Time string in HH:MM format
- * @example
- * getEasternTimeString(); // "14:30"
  */
-function getEasternTimeString() {
+function getEasternTimeString(): string {
   const parts = getEasternDateParts();
   return `${parts.hour}:${parts.minute}`;
 }
@@ -144,17 +151,12 @@ function getEasternTimeString() {
 /**
  * Calculates the Monday of the week containing the given date.
  * Used to normalize dates to week boundaries.
- * @param {Date|string} date - A Date object or date string (YYYY-MM-DD)
- * @returns {string} The Monday date in YYYY-MM-DD format
- * @example
- * getMonday('2024-01-17'); // "2024-01-15" (Wednesday → Monday)
- * getMonday(new Date());   // Monday of current week
  */
-function getMonday(date) {
-  const d = date instanceof Date ? getEasternNow() : new Date(date);
+function getMonday(date: Date | string): string | null {
+  const d = date instanceof Date ? getEasternNow() : new Date(date as string);
   if (!(date instanceof Date)) {
     // If a string was passed, parse it as-is
-    const parsed = new Date(date);
+    const parsed = new Date(date as string);
     if (isNaN(parsed.getTime())) {
       logger.warn({ date }, 'Invalid date passed to getMonday');
       return null;
@@ -173,27 +175,22 @@ function getMonday(date) {
 
 /**
  * Gets the Monday of the current week in Eastern timezone.
- * @returns {string} Current Monday in YYYY-MM-DD format
  */
-function getCurrentMonday() {
-  return getMonday(getEasternNow());
+function getCurrentMonday(): string {
+  return getMonday(getEasternNow()) as string;
 }
 
 /**
  * Gets or creates a week record and its associated day records.
  * Uses INSERT OR IGNORE to handle concurrent requests safely.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @returns {Object} The week record from the database
- * @throws {Error} If database operation fails
  */
-function getOrCreateWeek(weekOf) {
+function getOrCreateWeek(weekOf: string): WeekRecord {
   const database = getDb();
-  // Use INSERT OR IGNORE to prevent race condition with concurrent requests
   database.prepare('INSERT OR IGNORE INTO weeks (week_of) VALUES (?)').run(weekOf);
-  const week = database.prepare('SELECT * FROM weeks WHERE week_of = ?').get(weekOf);
+  const week = database.prepare('SELECT * FROM weeks WHERE week_of = ?').get(weekOf) as WeekRecord;
 
   // Check if days exist, create if not
-  const existingDays = database.prepare('SELECT COUNT(*) as count FROM days WHERE week_id = ?').get(week.id);
+  const existingDays = database.prepare('SELECT COUNT(*) as count FROM days WHERE week_id = ?').get(week.id) as { count: number };
   if (existingDays.count === 0) {
     const insertDay = database.prepare('INSERT OR IGNORE INTO days (week_id, day) VALUES (?, ?)');
     const insertMany = database.transaction(() => {
@@ -215,55 +212,42 @@ function getOrCreateWeek(weekOf) {
 
 /**
  * Retrieves a week and all its days from the database.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @returns {Object|null} Week object with days array, or null if not found
- * @example
- * const week = getWeek('2024-01-15');
- * // { id: 1, week_of: '2024-01-15', days: [...] }
  */
-function getWeek(weekOf) {
+function getWeek(weekOf: string): WeekWithDays | null {
   const database = getDb();
-  const week = database.prepare('SELECT * FROM weeks WHERE week_of = ?').get(weekOf);
+  const week = database.prepare('SELECT * FROM weeks WHERE week_of = ?').get(weekOf) as WeekRecord | undefined;
   if (!week) return null;
-  const days = database.prepare('SELECT * FROM days WHERE week_id = ? ORDER BY day').all(week.id);
+  const days = database.prepare('SELECT * FROM days WHERE week_id = ? ORDER BY day').all(week.id) as DayRecord[];
   return { ...week, days };
 }
 
 /**
  * Gets a week, creating it if it doesn't exist.
  * Convenience function that combines getOrCreateWeek and getWeek.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @returns {Object} Week object with days array
  */
-function getWeekWithCreate(weekOf) {
+function getWeekWithCreate(weekOf: string): WeekWithDays {
   getOrCreateWeek(weekOf);
-  return getWeek(weekOf);
+  return getWeek(weekOf) as WeekWithDays;
 }
 
 /**
  * Updates specific fields for a day in a week.
  * Only updates fields that are in the ALLOWED_DAY_FIELDS whitelist.
  * Truncates values to prevent database bloat.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @param {number} dayIndex - Day index (0=Monday, 6=Sunday)
- * @param {Object} fields - Key-value pairs of fields to update
- * @throws {Error} If database operation fails
- * @example
- * updateDay('2024-01-15', 0, { adult_dinner: 'Pasta', note: 'Birthday!' });
  */
-function updateDay(weekOf, dayIndex, fields) {
+function updateDay(weekOf: string, dayIndex: number, fields: Record<string, unknown>): void {
   const database = getDb();
   const week = getOrCreateWeek(weekOf);
-  const setClauses = [];
-  const values = [];
+  const setClauses: string[] = [];
+  const values: (string | number)[] = [];
 
   for (const [key, value] of Object.entries(fields)) {
-    const columnName = ALLOWED_DAY_FIELDS[key];  // Safe lookup - only mapped values used
+    const columnName = ALLOWED_DAY_FIELDS[key as DayFieldKey];
     if (columnName && typeof value === 'string') {
       // Enforce max length to prevent database bloat
       const maxLen = key === 'note' ? config.maxNoteLength : config.maxFieldLength;
       const truncated = value.slice(0, maxLen);
-      setClauses.push(`${columnName} = ?`);  // Uses mapped value, not user input
+      setClauses.push(`${columnName} = ?`);
       values.push(truncated);
     }
   }
@@ -279,22 +263,17 @@ function updateDay(weekOf, dayIndex, fields) {
 
 /**
  * Lists all saved weeks, ordered by date descending.
- * @returns {Array<Object>} Array of week records (id, week_of)
  */
-function listWeeks() {
+function listWeeks(): WeekRecord[] {
   const database = getDb();
-  return database.prepare('SELECT * FROM weeks ORDER BY week_of DESC LIMIT ?').all(config.maxWeeksReturned);
+  return database.prepare('SELECT * FROM weeks ORDER BY week_of DESC LIMIT ?').all(config.maxWeeksReturned) as WeekRecord[];
 }
 
 /**
  * Copies all meal data from one week to another.
  * Creates the target week if it doesn't exist.
- * @param {string} sourceWeekOf - Source week Monday in YYYY-MM-DD format
- * @param {string} targetWeekOf - Target week Monday in YYYY-MM-DD format
- * @returns {Object|null} The newly copied week, or null if source not found
- * @throws {Error} If database transaction fails
  */
-function copyWeek(sourceWeekOf, targetWeekOf) {
+function copyWeek(sourceWeekOf: string, targetWeekOf: string): WeekWithDays | null {
   const source = getWeek(sourceWeekOf);
   if (!source) {
     logger.warn({ sourceWeekOf }, 'Copy failed: source week not found');
@@ -333,26 +312,28 @@ function copyWeek(sourceWeekOf, targetWeekOf) {
   return getWeek(targetWeekOf);
 }
 
+/** Date info for upcoming days calculation */
+interface DateInfo {
+  dateStr: string;
+  weekOf: string | null;
+  dayIndex: number;
+}
+
 /**
  * Gets meal data for the upcoming N days starting from today.
  * Spans multiple weeks if necessary.
- * @param {number} count - Number of days to retrieve
- * @returns {Array<Object>} Array of day objects with formatted meal data
- * @example
- * const upcoming = getUpcomingDays(3);
- * // [{ date: '2024-01-17', day: 'Wednesday', baby: {...}, adult: {...} }, ...]
  */
-function getUpcomingDays(count) {
+function getUpcomingDays(count: number): UpcomingDay[] {
   const today = getEasternNow();
 
   // Pre-compute all dates and needed weeks to batch fetch
-  const dates = [];
-  const weekOfsNeeded = new Set();
+  const dates: DateInfo[] = [];
+  const weekOfsNeeded = new Set<string>();
   for (let i = 0; i < count; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
     const weekOf = getMonday(d);
-    weekOfsNeeded.add(weekOf);
+    if (weekOf) weekOfsNeeded.add(weekOf);
     const dow = d.getDay();
     // Convert Sunday (0) to index 6, otherwise subtract 1 to get 0-based index from Monday
     const dayIndex = dow === 0 ? 6 : dow - 1;
@@ -363,15 +344,15 @@ function getUpcomingDays(count) {
   }
 
   // Batch fetch all needed weeks
-  const weeksCache = {};
+  const weeksCache: Record<string, WeekWithDays | null> = {};
   for (const weekOf of weekOfsNeeded) {
     weeksCache[weekOf] = getWeek(weekOf);
   }
 
   // Build results using cached weeks
-  const results = [];
+  const results: UpcomingDay[] = [];
   for (const { dateStr, weekOf, dayIndex } of dates) {
-    const week = weeksCache[weekOf];
+    const week = weekOf ? weeksCache[weekOf] : null;
     const dayData = week ? week.days.find(r => r.day === dayIndex) : null;
     if (dayData) {
       results.push({
@@ -399,9 +380,8 @@ function getUpcomingDays(count) {
 
 /**
  * Deletes a week and all its associated days (via CASCADE).
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
  */
-function deleteWeek(weekOf) {
+function deleteWeek(weekOf: string): void {
   const database = getDb();
   const result = database.prepare('DELETE FROM weeks WHERE week_of = ?').run(weekOf);
   if (result.changes > 0) {
@@ -412,10 +392,8 @@ function deleteWeek(weekOf) {
 /**
  * Formats a week object for the public API response.
  * Transforms the internal database structure into a cleaner nested format.
- * @param {Object} weekData - Week object from getWeek()
- * @returns {Object|null} Formatted week object, or null if input is null
  */
-function formatWeekForApi(weekData) {
+function formatWeekForApi(weekData: WeekWithDays | null): FormattedWeek | null {
   if (!weekData) return null;
   return {
     week_of: weekData.week_of,
@@ -435,7 +413,7 @@ function formatWeekForApi(weekData) {
  * Closes the database connection.
  * Called during graceful shutdown to ensure WAL checkpoint completes.
  */
-function closeDb() {
+function closeDb(): void {
   if (db) {
     logger.info('Closing database connection');
     db.close();
@@ -457,20 +435,20 @@ process.on('SIGINT', () => {
 });
 
 // Handle uncaught exceptions to prevent database connection leaks
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', (err: Error) => {
   logger.fatal({ err }, 'Uncaught exception, closing database and exiting');
   closeDb();
   process.exit(1);
 });
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason: unknown) => {
   logger.fatal({ reason }, 'Unhandled promise rejection');
   closeDb();
   process.exit(1);
 });
 
-module.exports = {
+export {
   getDb,
   getMonday,
   getCurrentMonday,

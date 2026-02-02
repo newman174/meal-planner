@@ -4,7 +4,7 @@ A weekly meal planning app for tracking baby and adult meals, with a web interfa
 
 ## Tech Stack
 
-- **Backend**: Node.js + Express
+- **Backend**: Node.js + Express + TypeScript
 - **Database**: SQLite via better-sqlite3 (WAL mode)
 - **Frontend**: Vanilla JavaScript, HTML, CSS (no framework)
 - **Hardware**: Adafruit MagTag e-ink display (CircuitPython)
@@ -13,13 +13,16 @@ A weekly meal planning app for tracking baby and adult meals, with a web interfa
 
 ```
 meal-planner/
-├── src/                    # Server-side source code
-│   ├── server.js           # Express server entry point
-│   ├── db.js               # Database layer (SQLite)
-│   ├── logger.js           # Structured logging module
-│   └── config.js           # Centralized configuration
+├── src/                    # Server-side TypeScript source
+│   ├── types/
+│   │   └── index.ts        # Shared type definitions
+│   ├── server.ts           # Express server entry point
+│   ├── db.ts               # Database layer (SQLite)
+│   ├── logger.ts           # Structured logging module
+│   └── config.ts           # Centralized configuration
 ├── scripts/                # Utility scripts
-│   └── seed.js             # Database seeder
+│   └── seed.ts             # Database seeder
+├── dist/                   # Compiled JavaScript (gitignored)
 ├── public/                 # Frontend static files
 │   ├── index.html          # Main HTML page
 │   ├── app.js              # Frontend JavaScript (vanilla)
@@ -30,15 +33,19 @@ meal-planner/
 │   └── settings.toml       # WiFi/server config
 ├── logs/                   # Log files (production)
 ├── meals.db                # SQLite database file
+├── tsconfig.json           # TypeScript configuration
 └── package.json
 ```
 
 ## Commands
 
 ```bash
-npm start          # Start server (default port 3000)
+npm run build      # Compile TypeScript to dist/
+npm start          # Start compiled server (default port 3000)
+npm run start:dev  # Start dev server with hot reload (tsx)
 npm run seed       # Seed database with sample data
-npm run deploy     # Rsync to production server (192.168.50.193)
+npm run typecheck  # Run TypeScript type checker
+npm run deploy     # Build and rsync to production server
 ```
 
 ## API Endpoints

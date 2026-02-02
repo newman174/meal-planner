@@ -5,14 +5,14 @@
  * @module server
  */
 
-const express = require('express');
-const path = require('path');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const crypto = require('crypto');
-const config = require('./config');
-const db = require('./db');
-const logger = require('./logger');
+import express, { Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
+import config from './config.js';
+import * as db from './db.js';
+import logger from './logger.js';
+import './types/index.js'; // Import for Express Request extension
 
 const app = express();
 
@@ -20,7 +20,6 @@ const app = express();
  * API key for write operations.
  * Set via MEAL_PLANNER_API_KEY environment variable.
  * If not set, authentication is disabled (development mode).
- * @constant {string|undefined}
  */
 const API_KEY = process.env.MEAL_PLANNER_API_KEY;
 
@@ -66,7 +65,7 @@ const writeLimiter = rateLimit({
 /**
  * Apply appropriate rate limiter based on HTTP method.
  */
-app.use('/api/', (req, res, next) => {
+app.use('/api/', (req: Request, res: Response, next: NextFunction) => {
   if (req.method === 'GET') {
     return readLimiter(req, res, next);
   }
@@ -76,10 +75,8 @@ app.use('/api/', (req, res, next) => {
 /**
  * Validates that a string is a valid week date in YYYY-MM-DD format.
  * Also validates that the date is actually parseable.
- * @param {string} weekOf - The date string to validate
- * @returns {boolean} True if valid, false otherwise
  */
-function isValidWeekOf(weekOf) {
+function isValidWeekOf(weekOf: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekOf)) {
     return false;
   }
@@ -91,10 +88,8 @@ function isValidWeekOf(weekOf) {
 /**
  * Validates that a request body is a valid object (not null, array, or primitive).
  * Prevents prototype pollution and type confusion attacks.
- * @param {*} body - The request body to validate
- * @returns {boolean} True if valid object, false otherwise
  */
-function isValidRequestBody(body) {
+function isValidRequestBody(body: unknown): body is Record<string, unknown> {
   return body !== null && typeof body === 'object' && !Array.isArray(body);
 }
 
@@ -102,21 +97,20 @@ function isValidRequestBody(body) {
  * Authentication middleware for write operations.
  * Checks for X-API-Key header when MEAL_PLANNER_API_KEY is set.
  * Skips authentication if no API key is configured (development mode).
- * @param {express.Request} req - Express request object
- * @param {express.Response} res - Express response object
- * @param {express.NextFunction} next - Next middleware function
  */
-function requireApiKey(req, res, next) {
+function requireApiKey(req: Request, res: Response, next: NextFunction): void {
   // Skip auth if no API key is configured (development mode)
   if (!API_KEY) {
-    return next();
+    next();
+    return;
   }
 
   const providedKey = req.get('X-API-Key');
 
   if (!providedKey) {
     logger.warn({ method: req.method, path: req.path }, 'Missing API key');
-    return res.status(401).json({ error: 'API key required. Include X-API-Key header.' });
+    res.status(401).json({ error: 'API key required. Include X-API-Key header.' });
+    return;
   }
 
   // Use timing-safe comparison to prevent timing attacks
@@ -125,7 +119,8 @@ function requireApiKey(req, res, next) {
 
   if (keyBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(keyBuffer, providedBuffer)) {
     logger.warn({ method: req.method, path: req.path }, 'Invalid API key');
-    return res.status(403).json({ error: 'Invalid API key' });
+    res.status(403).json({ error: 'Invalid API key' });
+    return;
   }
 
   next();
@@ -135,20 +130,19 @@ function requireApiKey(req, res, next) {
 app.use(logger.requestMiddleware);
 
 // Static files
-app.use(express.static(config.paths.public(__dirname)));
+app.use(express.static(config.paths.public(import.meta.dirname)));
 
 // --- App API routes ---
 
 /**
  * GET /api/weeks/:weekOf
  * Retrieves a week's meals, creating the week if it doesn't exist.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @returns {Object} Week object with days array
  */
-app.get('/api/weeks/:weekOf', (req, res) => {
+app.get('/api/weeks/:weekOf', (req: Request<{ weekOf: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      return;
     }
     const week = db.getWeekWithCreate(req.params.weekOf);
     res.json(week);
@@ -162,24 +156,23 @@ app.get('/api/weeks/:weekOf', (req, res) => {
  * PUT /api/weeks/:weekOf/days/:day
  * Updates a specific day's meals.
  * Requires API key authentication if configured.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @param {number} day - Day index (0=Monday, 6=Sunday)
- * @body {Object} Field updates (e.g., { adult_dinner: "Pasta" })
- * @returns {Object} Updated week object
  */
-app.put('/api/weeks/:weekOf/days/:day', requireApiKey, (req, res) => {
+app.put('/api/weeks/:weekOf/days/:day', requireApiKey, (req: Request<{ weekOf: string; day: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      return;
     }
 
     if (!isValidRequestBody(req.body)) {
-      return res.status(400).json({ error: 'Invalid request body. Expected JSON object.' });
+      res.status(400).json({ error: 'Invalid request body. Expected JSON object.' });
+      return;
     }
 
     const dayIndex = parseInt(req.params.day, 10);
     if (isNaN(dayIndex) || dayIndex < 0 || dayIndex > 6) {
-      return res.status(400).json({ error: 'Invalid day index (0-6)' });
+      res.status(400).json({ error: 'Invalid day index (0-6)' });
+      return;
     }
 
     db.updateDay(req.params.weekOf, dayIndex, req.body);
@@ -194,9 +187,8 @@ app.put('/api/weeks/:weekOf/days/:day', requireApiKey, (req, res) => {
 /**
  * GET /api/weeks
  * Lists all saved weeks, ordered by date descending.
- * @returns {Array<Object>} Array of week summary objects
  */
-app.get('/api/weeks', (req, res) => {
+app.get('/api/weeks', (_req: Request, res: Response) => {
   try {
     const weeks = db.listWeeks();
     res.json(weeks);
@@ -210,30 +202,32 @@ app.get('/api/weeks', (req, res) => {
  * POST /api/weeks/:weekOf/copy
  * Copies all meal data from one week to another.
  * Requires API key authentication if configured.
- * @param {string} weekOf - Source week Monday in YYYY-MM-DD format
- * @body {Object} { targetWeekOf: "YYYY-MM-DD" }
- * @returns {Object} The newly created week
  */
-app.post('/api/weeks/:weekOf/copy', requireApiKey, (req, res) => {
+app.post('/api/weeks/:weekOf/copy', requireApiKey, (req: Request<{ weekOf: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
-      return res.status(400).json({ error: 'Invalid source date format. Use YYYY-MM-DD' });
+      res.status(400).json({ error: 'Invalid source date format. Use YYYY-MM-DD' });
+      return;
     }
 
     if (!isValidRequestBody(req.body)) {
-      return res.status(400).json({ error: 'Invalid request body. Expected JSON object.' });
+      res.status(400).json({ error: 'Invalid request body. Expected JSON object.' });
+      return;
     }
 
-    const { targetWeekOf } = req.body;
-    if (!targetWeekOf) {
-      return res.status(400).json({ error: 'targetWeekOf is required' });
+    const targetWeekOf = (req.body as Record<string, unknown>).targetWeekOf;
+    if (!targetWeekOf || typeof targetWeekOf !== 'string') {
+      res.status(400).json({ error: 'targetWeekOf is required' });
+      return;
     }
     if (!isValidWeekOf(targetWeekOf)) {
-      return res.status(400).json({ error: 'Invalid target date format. Use YYYY-MM-DD' });
+      res.status(400).json({ error: 'Invalid target date format. Use YYYY-MM-DD' });
+      return;
     }
     const result = db.copyWeek(req.params.weekOf, targetWeekOf);
     if (!result) {
-      return res.status(404).json({ error: 'Source week not found' });
+      res.status(404).json({ error: 'Source week not found' });
+      return;
     }
     res.json(result);
   } catch (err) {
@@ -246,13 +240,12 @@ app.post('/api/weeks/:weekOf/copy', requireApiKey, (req, res) => {
  * DELETE /api/weeks/:weekOf
  * Deletes a week and all its associated days.
  * Requires API key authentication if configured.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @returns {Object} { ok: true }
  */
-app.delete('/api/weeks/:weekOf', requireApiKey, (req, res) => {
+app.delete('/api/weeks/:weekOf', requireApiKey, (req: Request<{ weekOf: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      return;
     }
     db.deleteWeek(req.params.weekOf);
     res.json({ ok: true });
@@ -269,14 +262,14 @@ app.delete('/api/weeks/:weekOf', requireApiKey, (req, res) => {
  * GET /api/schedule/current
  * Returns the current week's meals formatted for display.
  * Public endpoint for Home Assistant integration.
- * @returns {Object} Formatted week data
  */
-app.get('/api/schedule/current', (req, res) => {
+app.get('/api/schedule/current', (_req: Request, res: Response) => {
   try {
     const weekOf = db.getCurrentMonday();
     const week = db.getWeek(weekOf);
     if (!week) {
-      return res.json({ week_of: weekOf, days: [] });
+      res.json({ week_of: weekOf, days: [] });
+      return;
     }
     res.json(db.formatWeekForApi(week));
   } catch (err) {
@@ -289,9 +282,8 @@ app.get('/api/schedule/current', (req, res) => {
  * GET /api/schedule/upcoming
  * Returns today plus the next 2 days' meals.
  * Optimized endpoint for MagTag e-ink display.
- * @returns {Object} { days: [...], updated_at: "HH:MM" }
  */
-app.get('/api/schedule/upcoming', (_req, res) => {
+app.get('/api/schedule/upcoming', (_req: Request, res: Response) => {
   try {
     const days = db.getUpcomingDays(3);
     res.json({ days, updated_at: db.getEasternTimeString() });
@@ -305,17 +297,17 @@ app.get('/api/schedule/upcoming', (_req, res) => {
  * GET /api/schedule/:weekOf
  * Returns a specific week's meals formatted for display.
  * Public endpoint for external integrations.
- * @param {string} weekOf - The Monday of the week in YYYY-MM-DD format
- * @returns {Object} Formatted week data
  */
-app.get('/api/schedule/:weekOf', (req, res) => {
+app.get('/api/schedule/:weekOf', (req: Request<{ weekOf: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      return;
     }
     const week = db.getWeek(req.params.weekOf);
     if (!week) {
-      return res.status(404).json({ error: 'Week not found' });
+      res.status(404).json({ error: 'Week not found' });
+      return;
     }
     res.json(db.formatWeekForApi(week));
   } catch (err) {
@@ -328,7 +320,7 @@ app.get('/api/schedule/:weekOf', (req, res) => {
  * Global error handler for unhandled errors.
  * Logs the error and returns a generic 500 response.
  */
-app.use((err, req, res, _next) => {
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error({ err, method: req.method, path: req.path }, 'Unhandled error');
   res.status(500).json({ error: 'Internal server error' });
 });
