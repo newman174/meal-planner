@@ -216,9 +216,9 @@ def render_today(day, batt, updated_at=""):
         # Wrap at word boundary
         line1, line2 = word_wrap(dinner, max_big)
         g.append(big_text(line1, x=6, y=y))
-        y += 18
+        y += 22
         g.append(big_text(trunc(line2, max_big) if len(line2) > max_big else line2, x=6, y=y))
-        y += 20
+        y += 16
 
     y += 2
     g.append(hline(y))
