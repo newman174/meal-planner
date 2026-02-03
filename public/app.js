@@ -26,15 +26,20 @@ const MAX_NOTE_LENGTH = 1000;
  * @constant {Object}
  */
 const FIELDS = {
+  baby_breakfast: [
+    { key: 'baby_breakfast_cereal', label: 'Cereal' },
+    { key: 'baby_breakfast_yogurt', label: 'Yogurt' },
+    { key: 'baby_breakfast_fruit', label: 'Fruit' },
+  ],
   baby_lunch: [
-    { key: 'baby_lunch_cereal', label: 'Cereal' },
+    { key: 'baby_lunch_meat', label: 'Meat' },
+    { key: 'baby_lunch_vegetable', label: 'Vegetable' },
     { key: 'baby_lunch_fruit', label: 'Fruit' },
-    { key: 'baby_lunch_yogurt', label: 'Yogurt' },
   ],
   baby_dinner: [
-    { key: 'baby_dinner_cereal', label: 'Cereal' },
-    { key: 'baby_dinner_fruit', label: 'Fruit' },
+    { key: 'baby_dinner_meat', label: 'Meat' },
     { key: 'baby_dinner_vegetable', label: 'Vegetable' },
+    { key: 'baby_dinner_fruit', label: 'Fruit' },
   ],
   adult_dinner: [
     { key: 'adult_dinner', label: 'Dinner' },
@@ -270,6 +275,8 @@ function renderWeek(weekData) {
 
     // Adult Dinner
     card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, day));
+    // Baby Breakfast
+    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, day));
     // Baby Lunch
     card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, day));
     // Baby Dinner

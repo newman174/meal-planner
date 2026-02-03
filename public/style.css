@@ -201,6 +201,10 @@ button:active {
   font-size: 0.9rem;
 }
 
+.meal-section.baby-breakfast h3::before {
+  content: '🥣';
+}
+
 .meal-section.baby-lunch h3::before {
   content: '🍼';
 }

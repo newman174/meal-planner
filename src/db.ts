@@ -65,12 +65,15 @@ function initSchema(): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       week_id INTEGER NOT NULL,
       day INTEGER NOT NULL,
-      baby_lunch_cereal TEXT DEFAULT '',
+      baby_breakfast_cereal TEXT DEFAULT '',
+      baby_breakfast_fruit TEXT DEFAULT '',
+      baby_breakfast_yogurt TEXT DEFAULT '',
+      baby_lunch_meat TEXT DEFAULT '',
+      baby_lunch_vegetable TEXT DEFAULT '',
       baby_lunch_fruit TEXT DEFAULT '',
-      baby_lunch_yogurt TEXT DEFAULT '',
-      baby_dinner_cereal TEXT DEFAULT '',
-      baby_dinner_fruit TEXT DEFAULT '',
+      baby_dinner_meat TEXT DEFAULT '',
       baby_dinner_vegetable TEXT DEFAULT '',
+      baby_dinner_fruit TEXT DEFAULT '',
       adult_dinner TEXT DEFAULT '',
       note TEXT DEFAULT '',
       FOREIGN KEY (week_id) REFERENCES weeks(id) ON DELETE CASCADE,
@@ -87,6 +90,40 @@ function initSchema(): void {
     db.exec('ALTER TABLE days RENAME COLUMN adult_dinner_note TO note');
     logger.info('Migrated adult_dinner_note column to note');
   }
+
+  // Migrate: 2-meal → 3-meal baby structure
+  // Old: baby_lunch (cereal, fruit, yogurt), baby_dinner (cereal, fruit, vegetable)
+  // New: baby_breakfast (cereal, fruit, yogurt), baby_lunch (meat, vegetable, fruit), baby_dinner (meat, vegetable, fruit)
+  if (cols.includes('baby_lunch_cereal') && !cols.includes('baby_breakfast_cereal')) {
+    logger.info('Migrating baby meal structure from 2-meal to 3-meal...');
+
+    // Add new columns
+    db.exec(`
+      ALTER TABLE days ADD COLUMN baby_breakfast_cereal TEXT DEFAULT '';
+      ALTER TABLE days ADD COLUMN baby_breakfast_fruit TEXT DEFAULT '';
+      ALTER TABLE days ADD COLUMN baby_breakfast_yogurt TEXT DEFAULT '';
+      ALTER TABLE days ADD COLUMN baby_lunch_meat TEXT DEFAULT '';
+      ALTER TABLE days ADD COLUMN baby_lunch_vegetable TEXT DEFAULT '';
+      ALTER TABLE days ADD COLUMN baby_dinner_meat TEXT DEFAULT '';
+    `);
+
+    // Copy old lunch → new breakfast (cereal, fruit, yogurt match exactly)
+    db.exec(`
+      UPDATE days SET
+        baby_breakfast_cereal = baby_lunch_cereal,
+        baby_breakfast_fruit = baby_lunch_fruit,
+        baby_breakfast_yogurt = baby_lunch_yogurt
+    `);
+
+    // Drop old columns (SQLite 3.35+)
+    db.exec(`
+      ALTER TABLE days DROP COLUMN baby_lunch_cereal;
+      ALTER TABLE days DROP COLUMN baby_lunch_yogurt;
+      ALTER TABLE days DROP COLUMN baby_dinner_cereal;
+    `);
+
+    logger.info('Baby meal structure migration complete');
+  }
 }
 
 /** Day names indexed by day number (0 = Monday, 6 = Sunday) */
@@ -101,12 +138,15 @@ const DAYS_PER_WEEK = 7;
  * names are used in dynamic queries.
  */
 const ALLOWED_DAY_FIELDS: Record<DayFieldKey, string> = {
-  'baby_lunch_cereal': 'baby_lunch_cereal',
+  'baby_breakfast_cereal': 'baby_breakfast_cereal',
+  'baby_breakfast_fruit': 'baby_breakfast_fruit',
+  'baby_breakfast_yogurt': 'baby_breakfast_yogurt',
+  'baby_lunch_meat': 'baby_lunch_meat',
+  'baby_lunch_vegetable': 'baby_lunch_vegetable',
   'baby_lunch_fruit': 'baby_lunch_fruit',
-  'baby_lunch_yogurt': 'baby_lunch_yogurt',
-  'baby_dinner_cereal': 'baby_dinner_cereal',
-  'baby_dinner_fruit': 'baby_dinner_fruit',
+  'baby_dinner_meat': 'baby_dinner_meat',
   'baby_dinner_vegetable': 'baby_dinner_vegetable',
+  'baby_dinner_fruit': 'baby_dinner_fruit',
   'adult_dinner': 'adult_dinner',
   'note': 'note'
 };
@@ -284,8 +324,9 @@ function copyWeek(sourceWeekOf: string, targetWeekOf: string): WeekWithDays | nu
   const database = getDb();
   const update = database.prepare(`
     UPDATE days SET
-      baby_lunch_cereal = ?, baby_lunch_fruit = ?, baby_lunch_yogurt = ?,
-      baby_dinner_cereal = ?, baby_dinner_fruit = ?, baby_dinner_vegetable = ?,
+      baby_breakfast_cereal = ?, baby_breakfast_fruit = ?, baby_breakfast_yogurt = ?,
+      baby_lunch_meat = ?, baby_lunch_vegetable = ?, baby_lunch_fruit = ?,
+      baby_dinner_meat = ?, baby_dinner_vegetable = ?, baby_dinner_fruit = ?,
       adult_dinner = ?, note = ?
     WHERE week_id = ? AND day = ?
   `);
@@ -293,8 +334,9 @@ function copyWeek(sourceWeekOf: string, targetWeekOf: string): WeekWithDays | nu
   const copyAll = database.transaction(() => {
     for (const day of source.days) {
       update.run(
-        day.baby_lunch_cereal, day.baby_lunch_fruit, day.baby_lunch_yogurt,
-        day.baby_dinner_cereal, day.baby_dinner_fruit, day.baby_dinner_vegetable,
+        day.baby_breakfast_cereal, day.baby_breakfast_fruit, day.baby_breakfast_yogurt,
+        day.baby_lunch_meat, day.baby_lunch_vegetable, day.baby_lunch_fruit,
+        day.baby_dinner_meat, day.baby_dinner_vegetable, day.baby_dinner_fruit,
         day.adult_dinner, day.note,
         target.id, day.day
       );
@@ -359,8 +401,9 @@ function getUpcomingDays(count: number): UpcomingDay[] {
         date: dateStr,
         day: DAY_NAMES[dayIndex],
         baby: {
-          lunch: { cereal: dayData.baby_lunch_cereal, fruit: dayData.baby_lunch_fruit, yogurt: dayData.baby_lunch_yogurt },
-          dinner: { cereal: dayData.baby_dinner_cereal, fruit: dayData.baby_dinner_fruit, vegetable: dayData.baby_dinner_vegetable }
+          breakfast: { cereal: dayData.baby_breakfast_cereal, fruit: dayData.baby_breakfast_fruit, yogurt: dayData.baby_breakfast_yogurt },
+          lunch: { meat: dayData.baby_lunch_meat, vegetable: dayData.baby_lunch_vegetable, fruit: dayData.baby_lunch_fruit },
+          dinner: { meat: dayData.baby_dinner_meat, vegetable: dayData.baby_dinner_vegetable, fruit: dayData.baby_dinner_fruit }
         },
         adult: { dinner: dayData.adult_dinner },
         note: dayData.note
@@ -369,7 +412,11 @@ function getUpcomingDays(count: number): UpcomingDay[] {
       results.push({
         date: dateStr,
         day: DAY_NAMES[dayIndex],
-        baby: { lunch: { cereal: '', fruit: '', yogurt: '' }, dinner: { cereal: '', fruit: '', vegetable: '' } },
+        baby: {
+          breakfast: { cereal: '', fruit: '', yogurt: '' },
+          lunch: { meat: '', vegetable: '', fruit: '' },
+          dinner: { meat: '', vegetable: '', fruit: '' }
+        },
         adult: { dinner: '' },
         note: ''
       });
@@ -400,8 +447,9 @@ function formatWeekForApi(weekData: WeekWithDays | null): FormattedWeek | null {
     days: weekData.days.map(d => ({
       day: DAY_NAMES[d.day],
       baby: {
-        lunch: { cereal: d.baby_lunch_cereal, fruit: d.baby_lunch_fruit, yogurt: d.baby_lunch_yogurt },
-        dinner: { cereal: d.baby_dinner_cereal, fruit: d.baby_dinner_fruit, vegetable: d.baby_dinner_vegetable }
+        breakfast: { cereal: d.baby_breakfast_cereal, fruit: d.baby_breakfast_fruit, yogurt: d.baby_breakfast_yogurt },
+        lunch: { meat: d.baby_lunch_meat, vegetable: d.baby_lunch_vegetable, fruit: d.baby_lunch_fruit },
+        dinner: { meat: d.baby_dinner_meat, vegetable: d.baby_dinner_vegetable, fruit: d.baby_dinner_fruit }
       },
       adult: { dinner: d.adult_dinner },
       note: d.note

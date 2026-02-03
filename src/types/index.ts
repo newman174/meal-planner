@@ -16,12 +16,15 @@ export interface DayRecord {
   id: number;
   week_id: number;
   day: number; // 0 = Monday, 6 = Sunday
-  baby_lunch_cereal: string;
+  baby_breakfast_cereal: string;
+  baby_breakfast_fruit: string;
+  baby_breakfast_yogurt: string;
+  baby_lunch_meat: string;
+  baby_lunch_vegetable: string;
   baby_lunch_fruit: string;
-  baby_lunch_yogurt: string;
-  baby_dinner_cereal: string;
-  baby_dinner_fruit: string;
+  baby_dinner_meat: string;
   baby_dinner_vegetable: string;
+  baby_dinner_fruit: string;
   adult_dinner: string;
   note: string;
 }
@@ -35,15 +38,20 @@ export interface WeekWithDays extends WeekRecord {
 
 /** Baby meal structure for API responses */
 export interface BabyMeals {
-  lunch: {
+  breakfast: {
     cereal: string;
     fruit: string;
     yogurt: string;
   };
-  dinner: {
-    cereal: string;
-    fruit: string;
+  lunch: {
+    meat: string;
     vegetable: string;
+    fruit: string;
+  };
+  dinner: {
+    meat: string;
+    vegetable: string;
+    fruit: string;
   };
 }
 
@@ -81,12 +89,15 @@ export interface UpcomingScheduleResponse {
 
 /** Allowed fields for day updates */
 export type DayFieldKey =
-  | 'baby_lunch_cereal'
+  | 'baby_breakfast_cereal'
+  | 'baby_breakfast_fruit'
+  | 'baby_breakfast_yogurt'
+  | 'baby_lunch_meat'
+  | 'baby_lunch_vegetable'
   | 'baby_lunch_fruit'
-  | 'baby_lunch_yogurt'
-  | 'baby_dinner_cereal'
-  | 'baby_dinner_fruit'
+  | 'baby_dinner_meat'
   | 'baby_dinner_vegetable'
+  | 'baby_dinner_fruit'
   | 'adult_dinner'
   | 'note';
 

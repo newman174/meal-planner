@@ -224,26 +224,34 @@ def render_today(day, batt, updated_at=""):
     g.append(hline(y))
     y += 8
 
-    # ── Baby meals — two columns, items only (no field labels) ──
+    # ── Baby meals — three columns: breakfast, lunch, dinner ──
+    bb = day["baby"]["breakfast"]
     bl = day["baby"]["lunch"]
     bd = day["baby"]["dinner"]
     c1 = 8
-    c2 = 152
+    c2 = 104
+    c3 = 200
 
-    g.append(Label(FONT, text="LUNCH", color=0x000000, x=c1, y=y))
-    g.append(Label(FONT, text="DINNER", color=0x000000, x=c2, y=y))
+    g.append(Label(FONT, text="BREAKFAST", color=0x000000, x=c1, y=y))
+    g.append(Label(FONT, text="LUNCH", color=0x000000, x=c2, y=y))
+    g.append(Label(FONT, text="DINNER", color=0x000000, x=c3, y=y))
     y += 11
 
-    lunch_items = [v for v in [bl.get("cereal"), bl.get("fruit"), bl.get("yogurt")] if v]
-    dinner_items = [v for v in [bd.get("cereal"), bd.get("fruit"), bd.get("vegetable")] if v]
+    bfast_items = [v for v in [bb.get("cereal"), bb.get("yogurt"), bb.get("fruit")] if v]
+    lunch_items = [v for v in [bl.get("meat"), bl.get("vegetable"), bl.get("fruit")] if v]
+    dinner_items = [v for v in [bd.get("meat"), bd.get("vegetable"), bd.get("fruit")] if v]
 
-    for i in range(max(len(lunch_items), len(dinner_items))):
-        if i < len(lunch_items):
+    max_rows = max(len(bfast_items), len(lunch_items), len(dinner_items))
+    for i in range(max_rows):
+        if i < len(bfast_items):
             g.append(bullet(c1, y))
-            g.append(Label(FONT, text=lunch_items[i], color=0x000000, x=c1 + 8, y=y))
-        if i < len(dinner_items):
+            g.append(Label(FONT, text=trunc(bfast_items[i], 14), color=0x000000, x=c1 + 8, y=y))
+        if i < len(lunch_items):
             g.append(bullet(c2, y))
-            g.append(Label(FONT, text=dinner_items[i], color=0x000000, x=c2 + 8, y=y))
+            g.append(Label(FONT, text=trunc(lunch_items[i], 14), color=0x000000, x=c2 + 8, y=y))
+        if i < len(dinner_items):
+            g.append(bullet(c3, y))
+            g.append(Label(FONT, text=trunc(dinner_items[i], 14), color=0x000000, x=c3 + 8, y=y))
         y += 11
 
     d.root_group = g

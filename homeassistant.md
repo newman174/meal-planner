@@ -50,19 +50,27 @@ Add a **Markdown card** to your dashboard:
 type: markdown
 title: Meal Plan
 content: >-
+  {% set baby_today = state_attr('sensor.meal_plan_today', 'baby') or {} %}
+  {% set baby_tomorrow = state_attr('sensor.meal_plan_tomorrow', 'baby') or {} %}
+  {% set baby_after = state_attr('sensor.meal_plan_day_after', 'baby') or {} %}
+
   ### {{ state_attr('sensor.meal_plan_today', 'day') }}
 
   {% if state_attr('sensor.meal_plan_today', 'note') %}_{{ state_attr('sensor.meal_plan_today', 'note') }}_{% endif %}
 
   Dinner: {{ states('sensor.meal_plan_today') }}
 
-  Baby Lunch: {{ state_attr('sensor.meal_plan_today', 'baby').lunch.cereal }}
-  / {{ state_attr('sensor.meal_plan_today', 'baby').lunch.fruit }}
-  / {{ state_attr('sensor.meal_plan_today', 'baby').lunch.yogurt }}
+  {% if baby_today.get('breakfast') %}Baby Breakfast: {{ baby_today.get('breakfast', {}).get('cereal', '') }}
+  / {{ baby_today.get('breakfast', {}).get('yogurt', '') }}
+  / {{ baby_today.get('breakfast', {}).get('fruit', '') }}{% endif %}
 
-  Baby Dinner: {{ state_attr('sensor.meal_plan_today', 'baby').dinner.cereal }}
-  / {{ state_attr('sensor.meal_plan_today', 'baby').dinner.fruit }}
-  / {{ state_attr('sensor.meal_plan_today', 'baby').dinner.vegetable }}
+  {% if baby_today.get('lunch') %}Baby Lunch: {{ baby_today.get('lunch', {}).get('meat', '') }}
+  / {{ baby_today.get('lunch', {}).get('vegetable', '') }}
+  / {{ baby_today.get('lunch', {}).get('fruit', '') }}{% endif %}
+
+  {% if baby_today.get('dinner') %}Baby Dinner: {{ baby_today.get('dinner', {}).get('meat', '') }}
+  / {{ baby_today.get('dinner', {}).get('vegetable', '') }}
+  / {{ baby_today.get('dinner', {}).get('fruit', '') }}{% endif %}
 
   ### {{ state_attr('sensor.meal_plan_tomorrow', 'day') }}
 
@@ -70,13 +78,17 @@ content: >-
 
   Dinner: {{ states('sensor.meal_plan_tomorrow') }}
 
-  Baby Lunch: {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.cereal }}
-  / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.fruit }}
-  / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').lunch.yogurt }}
+  {% if baby_tomorrow.get('breakfast') %}Baby Breakfast: {{ baby_tomorrow.get('breakfast', {}).get('cereal', '') }}
+  / {{ baby_tomorrow.get('breakfast', {}).get('yogurt', '') }}
+  / {{ baby_tomorrow.get('breakfast', {}).get('fruit', '') }}{% endif %}
 
-  Baby Dinner: {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.cereal }}
-  / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.fruit }}
-  / {{ state_attr('sensor.meal_plan_tomorrow', 'baby').dinner.vegetable }}
+  {% if baby_tomorrow.get('lunch') %}Baby Lunch: {{ baby_tomorrow.get('lunch', {}).get('meat', '') }}
+  / {{ baby_tomorrow.get('lunch', {}).get('vegetable', '') }}
+  / {{ baby_tomorrow.get('lunch', {}).get('fruit', '') }}{% endif %}
+
+  {% if baby_tomorrow.get('dinner') %}Baby Dinner: {{ baby_tomorrow.get('dinner', {}).get('meat', '') }}
+  / {{ baby_tomorrow.get('dinner', {}).get('vegetable', '') }}
+  / {{ baby_tomorrow.get('dinner', {}).get('fruit', '') }}{% endif %}
 
   ### {{ state_attr('sensor.meal_plan_day_after', 'day') }}
 
@@ -84,13 +96,17 @@ content: >-
 
   Dinner: {{ states('sensor.meal_plan_day_after') }}
 
-  Baby Lunch: {{ state_attr('sensor.meal_plan_day_after', 'baby').lunch.cereal }}
-  / {{ state_attr('sensor.meal_plan_day_after', 'baby').lunch.fruit }}
-  / {{ state_attr('sensor.meal_plan_day_after', 'baby').lunch.yogurt }}
+  {% if baby_after.get('breakfast') %}Baby Breakfast: {{ baby_after.get('breakfast', {}).get('cereal', '') }}
+  / {{ baby_after.get('breakfast', {}).get('yogurt', '') }}
+  / {{ baby_after.get('breakfast', {}).get('fruit', '') }}{% endif %}
 
-  Baby Dinner: {{ state_attr('sensor.meal_plan_day_after', 'baby').dinner.cereal }}
-  / {{ state_attr('sensor.meal_plan_day_after', 'baby').dinner.fruit }}
-  / {{ state_attr('sensor.meal_plan_day_after', 'baby').dinner.vegetable }}
+  {% if baby_after.get('lunch') %}Baby Lunch: {{ baby_after.get('lunch', {}).get('meat', '') }}
+  / {{ baby_after.get('lunch', {}).get('vegetable', '') }}
+  / {{ baby_after.get('lunch', {}).get('fruit', '') }}{% endif %}
+
+  {% if baby_after.get('dinner') %}Baby Dinner: {{ baby_after.get('dinner', {}).get('meat', '') }}
+  / {{ baby_after.get('dinner', {}).get('vegetable', '') }}
+  / {{ baby_after.get('dinner', {}).get('fruit', '') }}{% endif %}
 ```
 
 ### 3. Restart Home Assistant

@@ -69,8 +69,9 @@ npm run deploy     # Build and rsync to production server
 
 **days** table:
 - `week_id`, `day` (0=Monday, 6=Sunday)
-- Baby lunch: `baby_lunch_cereal`, `baby_lunch_fruit`, `baby_lunch_yogurt`
-- Baby dinner: `baby_dinner_cereal`, `baby_dinner_fruit`, `baby_dinner_vegetable`
+- Baby breakfast: `baby_breakfast_cereal`, `baby_breakfast_fruit`, `baby_breakfast_yogurt`
+- Baby lunch: `baby_lunch_meat`, `baby_lunch_vegetable`, `baby_lunch_fruit`
+- Baby dinner: `baby_dinner_meat`, `baby_dinner_vegetable`, `baby_dinner_fruit`
 - Adult: `adult_dinner`
 - `note` - Day-level note field
 
@@ -80,8 +81,8 @@ npm run deploy     # Build and rsync to production server
 - Visual feedback: green border during save
 - Today's card highlighted with amber/cream colors
 - Clicking "Today" button scrolls to today's card
-- Meal section order: Adult Dinner → Baby Lunch → Baby Dinner
-- Emoji icons on section headers (🍽️ 🍼 👶)
+- Meal section order: Adult Dinner → Baby Breakfast → Baby Lunch → Baby Dinner
+- Emoji icons on section headers (🍽️ 🥣 🍼 👶)
 
 ## MagTag Display
 
