@@ -14,3 +14,6 @@ meals.md
 # Logs
 *.log
 logs/
+
+# Test coverage
+coverage/

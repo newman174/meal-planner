@@ -325,10 +325,16 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start server
-app.listen(config.port, () => {
-  logger.info({ port: config.port }, 'Meal Planner server started');
-  if (API_KEY) {
-    logger.info('API key authentication enabled for write operations');
-  }
-});
+// Export for testing
+export { app, isValidWeekOf, isValidRequestBody };
+
+// Start server only when run directly (not imported for tests)
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  app.listen(config.port, () => {
+    logger.info({ port: config.port }, 'Meal Planner server started');
+    if (API_KEY) {
+      logger.info('API key authentication enabled for write operations');
+    }
+  });
+}

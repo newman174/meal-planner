@@ -496,6 +496,27 @@ process.on('unhandledRejection', (reason: unknown) => {
   process.exit(1);
 });
 
+// ============ Test Helpers ============
+
+/**
+ * Injects a test database instance.
+ * Only use in tests to replace the production database with an in-memory one.
+ */
+function setTestDb(testDb: Database.Database): void {
+  db = testDb;
+}
+
+/**
+ * Resets the database connection.
+ * Used in tests to clean up between test runs.
+ */
+function resetDb(): void {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
 export {
   getDb,
   getMonday,
@@ -510,6 +531,10 @@ export {
   formatWeekForApi,
   getUpcomingDays,
   getEasternTimeString,
+  getEasternDateParts,
   DAY_NAMES,
-  closeDb
+  ALLOWED_DAY_FIELDS,
+  closeDb,
+  setTestDb,
+  resetDb
 };
