@@ -1,3 +1,118 @@
+:root {
+  /* Brand */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
+
+  /* Backgrounds */
+  --bg-body: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-header: rgba(255, 255, 255, 0.95);
+  --bg-input: #fafbfc;
+  --bg-input-focus: #fff;
+  --bg-button: linear-gradient(135deg, #f8f9fc 0%, #eef1f5 100%);
+  --bg-button-hover: linear-gradient(135deg, #fff 0%, #f5f7fa 100%);
+  --bg-modal: #fff;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #444;
+  --text-tertiary: #666;
+  --text-muted: #888;
+  --text-placeholder: #aaa;
+
+  /* Borders */
+  --border-card: rgba(255, 255, 255, 0.5);
+  --border-input: #e8ebef;
+  --border-divider: #f0f2f5;
+  --border-header: rgba(255, 255, 255, 0.2);
+
+  /* Today card (amber) */
+  --today-bg: #fffbeb;
+  --today-border: #f59e0b;
+  --today-text: #b45309;
+  --today-date: #d97706;
+  --today-divider: #fcd34d;
+  --today-section: #92400e;
+  --today-label: #78350f;
+  --today-shadow: 0 8px 32px rgba(245, 158, 11, 0.25), 0 2px 8px rgba(0, 0, 0, 0.1);
+  --today-shadow-hover: 0 12px 40px rgba(245, 158, 11, 0.35), 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* Feedback */
+  --save-color: #10b981;
+  --save-bg: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  --error-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+
+  /* Shadows */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --shadow-button-hover: 0 4px 12px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 1);
+  --shadow-header: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.2);
+  --focus-ring: rgba(102, 126, 234, 0.15);
+
+  /* List hover */
+  --list-hover: #f8f9fc;
+}
+
+[data-theme="dark"] {
+  --bg-body: linear-gradient(135deg, #1a1625 0%, #2d1f3d 100%);
+  --bg-card: rgba(30, 27, 38, 0.95);
+  --bg-header: rgba(26, 22, 37, 0.95);
+  --bg-input: #252030;
+  --bg-input-focus: #2d2838;
+  --bg-button: linear-gradient(135deg, #2d2838 0%, #352f42 100%);
+  --bg-button-hover: linear-gradient(135deg, #3a3347 0%, #423a52 100%);
+  --bg-modal: #1e1b26;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.7);
+
+  --text-primary: #f0f0f2;
+  --text-secondary: #c8c5d0;
+  --text-tertiary: #a8a4b4;
+  --text-muted: #888498;
+  --text-placeholder: #6b6780;
+
+  --border-card: rgba(255, 255, 255, 0.08);
+  --border-input: #3a3545;
+  --border-divider: #2d2838;
+  --border-header: rgba(255, 255, 255, 0.06);
+
+  --today-bg: #2a2518;
+  --today-border: #b47808;
+  --today-text: #f5c542;
+  --today-date: #eab308;
+  --today-divider: #5c4a1a;
+  --today-section: #fbbf24;
+  --today-label: #fcd34d;
+  --today-shadow: 0 8px 32px rgba(180, 120, 8, 0.25), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --today-shadow-hover: 0 12px 40px rgba(180, 120, 8, 0.35), 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  --save-color: #34d399;
+  --save-bg: linear-gradient(135deg, #0a2e1e 0%, #0c3524 100%);
+
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-button-hover: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-header: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --focus-ring: rgba(102, 126, 234, 0.25);
+
+  --list-hover: #2d2838;
+}
+
+/* Theme transitions */
+body,
+header,
+.day-card,
+.modal,
+button,
+input,
+.day-note {
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -6,9 +121,9 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-body);
   min-height: 100vh;
-  color: #1a1a1a;
+  color: var(--text-primary);
   padding: 0 0 48px;
 }
 
@@ -17,10 +132,10 @@ header {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--bg-header);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--border-header);
+  box-shadow: var(--shadow-header);
   padding: 12px 20px;
   display: flex;
   align-items: center;
@@ -51,7 +166,7 @@ h1 {
   font-size: 0.9rem;
   min-width: 170px;
   text-align: center;
-  color: #444;
+  color: var(--text-secondary);
 }
 
 .header-actions {
@@ -63,20 +178,20 @@ h1 {
 button {
   cursor: pointer;
   border: none;
-  background: linear-gradient(135deg, #f8f9fc 0%, #eef1f5 100%);
+  background: var(--bg-button);
   border-radius: 10px;
   padding: 8px 16px;
   font-size: 0.85rem;
   font-family: inherit;
   font-weight: 500;
-  color: #444;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-button);
   transition: all 0.2s ease;
 }
 
 button:hover {
-  background: linear-gradient(135deg, #fff 0%, #f5f7fa 100%);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 1);
+  background: var(--bg-button-hover);
+  box-shadow: var(--shadow-button-hover);
   transform: translateY(-1px);
 }
 
@@ -91,14 +206,29 @@ button:active {
 }
 
 #today-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   color: white;
   font-weight: 600;
 }
 
 #today-btn:hover {
-  background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
+  background: var(--gradient-primary-hover);
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+}
+
+#theme-toggle {
+  min-width: 38px;
+  padding: 6px 10px;
+  font-size: 1rem;
+}
+
+#theme-toggle .theme-icon {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+#theme-toggle:hover .theme-icon {
+  transform: rotate(20deg);
 }
 
 /* ── Week grid ── */
@@ -113,26 +243,26 @@ button:active {
 
 /* ── Day cards ── */
 .day-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--bg-card);
   backdrop-filter: blur(8px);
   border-radius: 16px;
   padding: 18px 20px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   transition: all 0.25s ease;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-card);
 }
 
 .day-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .day-card h2 {
   font-size: 1rem;
-  color: #333;
-  border-bottom: 2px solid #f0f2f5;
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--border-divider);
   padding-bottom: 10px;
   margin-bottom: 14px;
   display: flex;
@@ -144,36 +274,36 @@ button:active {
 .day-date {
   font-weight: 500;
   font-size: 0.85rem;
-  color: #888;
+  color: var(--text-muted);
 }
 
 .day-card.today {
-  background: #fffbeb;
-  border: 3px solid #f59e0b;
-  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.25), 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--today-bg);
+  border: 3px solid var(--today-border);
+  box-shadow: var(--today-shadow);
 }
 
 .day-card.today:hover {
   transform: translateY(-3px);
-  box-shadow: 0 12px 40px rgba(245, 158, 11, 0.35), 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--today-shadow-hover);
 }
 
 .day-card.today h2 {
-  color: #b45309;
-  border-bottom-color: #fcd34d;
+  color: var(--today-text);
+  border-bottom-color: var(--today-divider);
   font-weight: 800;
 }
 
 .day-card.today .day-date {
-  color: #d97706;
+  color: var(--today-date);
 }
 
 .day-card.today .meal-section h3 {
-  color: #92400e;
+  color: var(--today-section);
 }
 
 .day-card.today .meal-fields label {
-  color: #78350f;
+  color: var(--today-label);
 }
 
 /* ── Meal sections ── */
@@ -189,7 +319,7 @@ button:active {
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: #888;
+  color: var(--text-muted);
   letter-spacing: 0.8px;
   margin-bottom: 8px;
   display: flex;
@@ -226,46 +356,46 @@ button:active {
 
 .meal-fields label {
   font-size: 0.82rem;
-  color: #666;
+  color: var(--text-tertiary);
   white-space: nowrap;
   font-weight: 500;
 }
 
 .meal-fields input {
-  border: 1px solid #e8ebef;
+  border: 1px solid var(--border-input);
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 0.85rem;
   width: 100%;
   font-family: inherit;
-  color: #1a1a1a;
-  background: #fafbfc;
+  color: var(--text-primary);
+  background: var(--bg-input);
   transition: all 0.2s ease;
 }
 
 .meal-fields input:focus {
   outline: none;
   border-color: #667eea;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  background: var(--bg-input-focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .meal-fields input.saving {
-  border-color: #10b981;
-  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border-color: var(--save-color);
+  background: var(--save-bg);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .day-note {
   width: 100%;
-  border: 1px solid #e8ebef;
+  border: 1px solid var(--border-input);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 0.85rem;
   font-family: inherit;
-  color: #888;
+  color: var(--text-muted);
   font-style: italic;
-  background: linear-gradient(135deg, #fafbfc 0%, #f5f7fa 100%);
+  background: var(--bg-input);
   margin-bottom: 14px;
   transition: all 0.2s ease;
 }
@@ -273,19 +403,19 @@ button:active {
 .day-note:focus {
   outline: none;
   border-color: #667eea;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
-  color: #1a1a1a;
+  background: var(--bg-input-focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  color: var(--text-primary);
   font-style: normal;
 }
 
 .day-note.saving {
-  border-color: #10b981;
-  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border-color: var(--save-color);
+  background: var(--save-bg);
 }
 
 .day-note::placeholder {
-  color: #aaa;
+  color: var(--text-placeholder);
 }
 
 /* ── Modal ── */
@@ -295,7 +425,7 @@ button:active {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-modal-overlay);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -308,14 +438,14 @@ button:active {
 }
 
 .modal {
-  background: #fff;
+  background: var(--bg-modal);
   border-radius: 20px;
   width: 90%;
   max-width: 480px;
   max-height: 80vh;
   overflow-y: auto;
   padding: 24px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-modal);
 }
 
 .modal-header {
@@ -328,22 +458,22 @@ button:active {
 .modal-header h2 {
   font-size: 1.15rem;
   font-weight: 700;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .btn-close {
   border: none;
-  background: #f5f7fa;
+  background: var(--bg-button);
   font-size: 1.3rem;
-  color: #888;
+  color: var(--text-muted);
   padding: 4px 10px;
   border-radius: 8px;
   box-shadow: none;
 }
 
 .btn-close:hover {
-  background: #eef1f5;
-  color: #666;
+  background: var(--bg-button-hover);
+  color: var(--text-tertiary);
   box-shadow: none;
   transform: none;
 }
@@ -357,13 +487,14 @@ button:active {
   justify-content: space-between;
   align-items: center;
   padding: 12px 10px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--border-divider);
   border-radius: 8px;
   transition: background 0.15s ease;
+  color: var(--text-primary);
 }
 
 .week-list li:hover {
-  background: #f8f9fc;
+  background: var(--list-hover);
 }
 
 .week-list li:last-child {
@@ -372,12 +503,12 @@ button:active {
 
 .week-list button {
   font-size: 0.8rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   color: white;
 }
 
 .week-list button:hover {
-  background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
+  background: var(--gradient-primary-hover);
 }
 
 .copy-form {
@@ -389,7 +520,7 @@ button:active {
 .copy-form label {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #444;
+  color: var(--text-secondary);
   display: block;
   margin-bottom: 6px;
 }
@@ -398,11 +529,12 @@ button:active {
 .copy-form input[type="date"] {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #e8ebef;
+  border: 1px solid var(--border-input);
   border-radius: 10px;
   font-size: 0.9rem;
   font-family: inherit;
-  background: #fafbfc;
+  background: var(--bg-input);
+  color: var(--text-primary);
   transition: all 0.2s ease;
 }
 
@@ -410,11 +542,11 @@ button:active {
 .copy-form input[type="date"]:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .copy-form .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-primary);
   color: #fff;
   border: none;
   padding: 12px;
@@ -425,7 +557,7 @@ button:active {
 }
 
 .copy-form .btn-primary:hover {
-  background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
+  background: var(--gradient-primary-hover);
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
@@ -463,7 +595,7 @@ button:active {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: var(--error-gradient);
   color: white;
   padding: 12px 24px;
   border-radius: 10px;

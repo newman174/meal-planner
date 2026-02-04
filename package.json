@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "deploy": "npm run build && rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' --exclude src ./ root@192.168.50.193:~/meal-planner/"
+    "deploy": "npm run build && rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' --exclude src --exclude logs ./ root@192.168.50.193:~/meal-planner/"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",

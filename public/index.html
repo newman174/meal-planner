@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Meal Planner</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <script>
+    (function() {
+      const stored = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', stored || (prefersDark ? 'dark' : 'light'));
+    })();
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,6 +24,9 @@
       <button id="today-btn" class="btn-small">Today</button>
     </div>
     <div class="header-actions">
+      <button id="theme-toggle" class="btn-small" aria-label="Toggle dark mode">
+        <span class="theme-icon">🌙</span>
+      </button>
       <button id="history-btn" class="btn-small">History</button>
       <button id="copy-btn" class="btn-small">Copy Week</button>
     </div>

@@ -11,6 +11,46 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 // Configuration constants
 /** Delay before saving after user stops typing (ms) */
 const DEBOUNCE_DELAY_MS = 400;
+
+// Theme management
+const THEME_KEY = 'theme';
+
+/**
+ * Gets the current theme, falling back to system preference.
+ * @returns {string} 'dark' or 'light'
+ */
+function getTheme() {
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored) return stored;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/**
+ * Sets the theme and updates localStorage and UI.
+ * @param {string} theme - 'dark' or 'light'
+ */
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+  updateThemeIcon(theme);
+}
+
+/**
+ * Updates the theme toggle button icon.
+ * @param {string} theme - Current theme
+ */
+function updateThemeIcon(theme) {
+  const icon = document.querySelector('#theme-toggle .theme-icon');
+  if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+/**
+ * Toggles between light and dark themes.
+ */
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || getTheme();
+  setTheme(current === 'dark' ? 'light' : 'dark');
+}
 /** Duration to show green border feedback after save (ms) */
 const SAVE_FEEDBACK_DURATION_MS = 600;
 /** Duration to show error toast messages (ms) */
@@ -519,6 +559,23 @@ document.getElementById('copy-btn').addEventListener('click', async () => {
     showError('Failed to load copy dialog. Please try again.');
   }
 });
+
+// Theme toggle
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  if (!localStorage.getItem(THEME_KEY)) setTheme(e.matches ? 'dark' : 'light');
+});
+
+// Initialize theme - ensure attribute is set and icon matches
+// (handles case where inline script in <head> didn't run or failed)
+const initialTheme = document.documentElement.getAttribute('data-theme');
+if (!initialTheme) {
+  // Inline script didn't set the attribute, apply theme now
+  setTheme(getTheme());
+} else {
+  // Inline script worked, just sync the icon to match the actual attribute
+  updateThemeIcon(initialTheme);
+}
 
 // Initialize the app
 loadWeek();
