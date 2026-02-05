@@ -330,4 +330,134 @@ describe('API Endpoints', () => {
       expect(res.body.error).toContain('Invalid date format');
     });
   });
+
+  describe('GET /api/inventory', () => {
+    it('returns empty inventory with no meals planned', async () => {
+      const res = await client.get('/api/inventory?lookahead=7');
+
+      expect(res.status).toBe(200);
+      expect(res.body.items).toEqual([]);
+      expect(res.body.otherStock).toEqual([]);
+      expect(res.body.lookahead).toBe(7);
+    });
+
+    it('returns inventory with planned meals', async () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+
+      const res = await client.get('/api/inventory?lookahead=7&today=2025-01-06');
+
+      expect(res.status).toBe(200);
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0].ingredient).toBe('chicken');
+      expect(res.body.items[0].needed).toBe(1);
+    });
+
+    it('defaults lookahead to 7', async () => {
+      const res = await client.get('/api/inventory');
+
+      expect(res.status).toBe(200);
+      expect(res.body.lookahead).toBe(7);
+    });
+
+    it('rejects invalid lookahead values', async () => {
+      const res = await client.get('/api/inventory?lookahead=10');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('lookahead');
+    });
+  });
+
+  describe('PUT /api/inventory/:ingredient', () => {
+    it('sets absolute stock', async () => {
+      const res = await client
+        .put('/api/inventory/chicken')
+        .send({ stock: 5 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ingredient).toBe('chicken');
+      expect(res.body.stock).toBe(5);
+    });
+
+    it('applies delta to stock', async () => {
+      await client.put('/api/inventory/chicken').send({ stock: 3 });
+
+      const res = await client
+        .put('/api/inventory/chicken')
+        .send({ delta: 2 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.stock).toBe(5);
+    });
+
+    it('returns 400 when neither stock nor delta provided', async () => {
+      const res = await client
+        .put('/api/inventory/chicken')
+        .send({});
+
+      expect(res.status).toBe(400);
+    });
+
+    it('normalizes ingredient name', async () => {
+      const res = await client
+        .put('/api/inventory/%20Chicken%20')
+        .send({ stock: 5 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ingredient).toBe('chicken');
+    });
+  });
+
+  describe('PUT /api/weeks/:weekOf/days/:day/consume', () => {
+    it('marks meal as consumed and returns updated day', async () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+
+      const res = await client
+        .put('/api/weeks/2025-01-06/days/0/consume')
+        .send({ meal: 'baby_lunch' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.baby_lunch_consumed).toBe(1);
+    });
+
+    it('returns 400 for invalid meal type', async () => {
+      insertTestWeek(db, '2025-01-06');
+
+      const res = await client
+        .put('/api/weeks/2025-01-06/days/0/consume')
+        .send({ meal: 'adult_dinner' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('meal');
+    });
+
+    it('returns 400 for missing meal field', async () => {
+      insertTestWeek(db, '2025-01-06');
+
+      const res = await client
+        .put('/api/weeks/2025-01-06/days/0/consume')
+        .send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('PUT /api/weeks/:weekOf/days/:day/unconsume', () => {
+    it('unmarks meal as consumed', async () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+
+      await client
+        .put('/api/weeks/2025-01-06/days/0/consume')
+        .send({ meal: 'baby_lunch' });
+
+      const res = await client
+        .put('/api/weeks/2025-01-06/days/0/unconsume')
+        .send({ meal: 'baby_lunch' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.baby_lunch_consumed).toBe(0);
+    });
+  });
 });

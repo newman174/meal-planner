@@ -258,6 +258,148 @@ app.delete('/api/weeks/:weekOf', requireApiKey, (req: Request<{ weekOf: string }
   }
 });
 
+// --- Inventory API routes ---
+
+const VALID_LOOKAHEADS = [3, 5, 7];
+const VALID_MEAL_TYPES = ['baby_breakfast', 'baby_lunch', 'baby_dinner'];
+
+/**
+ * GET /api/inventory
+ * Returns inventory items with needed counts and stock levels.
+ */
+app.get('/api/inventory', (req: Request, res: Response) => {
+  try {
+    const lookaheadParam = parseInt(req.query.lookahead as string, 10) || 7;
+    if (!VALID_LOOKAHEADS.includes(lookaheadParam)) {
+      res.status(400).json({ error: 'Invalid lookahead. Must be 3, 5, or 7.' });
+      return;
+    }
+
+    const todayOverride = req.query.today as string | undefined;
+    const result = db.getInventory(lookaheadParam, todayOverride);
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, 'Error fetching inventory');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/inventory/:ingredient
+ * Updates stock for an ingredient (absolute or delta).
+ */
+app.put('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient: string }>, res: Response) => {
+  try {
+    if (!isValidRequestBody(req.body)) {
+      res.status(400).json({ error: 'Invalid request body.' });
+      return;
+    }
+
+    const { stock, delta } = req.body as { stock?: number; delta?: number };
+    if (stock === undefined && delta === undefined) {
+      res.status(400).json({ error: 'Provide either "stock" (absolute) or "delta" (relative).' });
+      return;
+    }
+
+    if (stock !== undefined && typeof stock !== 'number') {
+      res.status(400).json({ error: '"stock" must be a number.' });
+      return;
+    }
+    if (delta !== undefined && typeof delta !== 'number') {
+      res.status(400).json({ error: '"delta" must be a number.' });
+      return;
+    }
+
+    const ingredient = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+    db.updateStock(ingredient, { stock, delta });
+
+    const database = db.getDb();
+    const row = database.prepare('SELECT ingredient, stock FROM inventory WHERE ingredient = ?').get(ingredient) as { ingredient: string; stock: number } | undefined;
+    res.json(row || { ingredient, stock: 0 });
+  } catch (err) {
+    logger.error({ err, ingredient: req.params.ingredient }, 'Error updating inventory');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/weeks/:weekOf/days/:day/consume
+ * Marks a baby meal as consumed and decrements ingredient stock.
+ */
+app.put('/api/weeks/:weekOf/days/:day/consume', requireApiKey, (req: Request<{ weekOf: string; day: string }>, res: Response) => {
+  try {
+    if (!isValidWeekOf(req.params.weekOf)) {
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      return;
+    }
+    if (!isValidRequestBody(req.body)) {
+      res.status(400).json({ error: 'Invalid request body.' });
+      return;
+    }
+
+    const dayIndex = parseInt(req.params.day, 10);
+    if (isNaN(dayIndex) || dayIndex < 0 || dayIndex > 6) {
+      res.status(400).json({ error: 'Invalid day index (0-6)' });
+      return;
+    }
+
+    const meal = (req.body as Record<string, unknown>).meal as string;
+    if (!meal || !VALID_MEAL_TYPES.includes(meal)) {
+      res.status(400).json({ error: 'Invalid meal. Must be baby_breakfast, baby_lunch, or baby_dinner.' });
+      return;
+    }
+
+    const result = db.consumeMeal(req.params.weekOf, dayIndex, meal);
+    if (!result) {
+      res.status(404).json({ error: 'Day not found' });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, 'Error consuming meal');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PUT /api/weeks/:weekOf/days/:day/unconsume
+ * Unmarks a baby meal as consumed and increments ingredient stock.
+ */
+app.put('/api/weeks/:weekOf/days/:day/unconsume', requireApiKey, (req: Request<{ weekOf: string; day: string }>, res: Response) => {
+  try {
+    if (!isValidWeekOf(req.params.weekOf)) {
+      res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+      return;
+    }
+    if (!isValidRequestBody(req.body)) {
+      res.status(400).json({ error: 'Invalid request body.' });
+      return;
+    }
+
+    const dayIndex = parseInt(req.params.day, 10);
+    if (isNaN(dayIndex) || dayIndex < 0 || dayIndex > 6) {
+      res.status(400).json({ error: 'Invalid day index (0-6)' });
+      return;
+    }
+
+    const meal = (req.body as Record<string, unknown>).meal as string;
+    if (!meal || !VALID_MEAL_TYPES.includes(meal)) {
+      res.status(400).json({ error: 'Invalid meal. Must be baby_breakfast, baby_lunch, or baby_dinner.' });
+      return;
+    }
+
+    const result = db.unconsumeMeal(req.params.weekOf, dayIndex, meal);
+    if (!result) {
+      res.status(404).json({ error: 'Day not found' });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, 'Error unconsuming meal');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // --- Public API routes (for Home Assistant, MagTag, etc.) ---
 // These routes are intentionally unauthenticated for easy integration
 
