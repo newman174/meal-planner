@@ -92,6 +92,12 @@ let currentWeekOf = getMonday(new Date());
 /** Map of timer IDs for debounced saves, keyed by "dayIndex-fieldKey" */
 let saveTimers = {};
 
+/** Currently active page: 'meals' or 'inventory' */
+let currentPage = 'meals';
+
+/** Current lookahead days for inventory */
+let inventoryLookahead = 7;
+
 /**
  * Calculates the Monday of the week containing the given date.
  * @param {Date} date - A Date object
@@ -624,6 +630,244 @@ if (!initialTheme) {
   // Inline script worked, just sync the icon to match the actual attribute
   updateThemeIcon(initialTheme);
 }
+
+/**
+ * Category display configuration for inventory.
+ */
+const CATEGORY_ORDER = ['meat', 'vegetable', 'fruit', 'cereal', 'yogurt'];
+const CATEGORY_LABELS = {
+  meat: 'Meat',
+  vegetable: 'Vegetable',
+  fruit: 'Fruit',
+  cereal: 'Cereal',
+  yogurt: 'Yogurt',
+  '': 'Other',
+};
+
+/**
+ * Fetches inventory data from the API.
+ */
+async function fetchInventory() {
+  try {
+    const res = await fetch(`/api/inventory?lookahead=${inventoryLookahead}`);
+    if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
+    return res.json();
+  } catch (err) {
+    console.error('Error fetching inventory:', err);
+    showError('Failed to load inventory. Please try again.');
+    throw err;
+  }
+}
+
+/**
+ * Updates stock via API and refreshes the inventory display.
+ */
+async function updateStockApi(ingredient, delta) {
+  try {
+    const res = await fetch(`/api/inventory/${encodeURIComponent(ingredient)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta }),
+    });
+    if (!res.ok) throw new Error(`Failed to update stock: ${res.status}`);
+    return true;
+  } catch (err) {
+    console.error('Error updating stock:', err);
+    showError('Failed to update stock. Please try again.');
+    return false;
+  }
+}
+
+/**
+ * Creates an inventory item row element.
+ */
+function createInventoryItem(item) {
+  const row = document.createElement('div');
+  row.className = 'inventory-item';
+  if (item.toMake > 0) {
+    row.classList.add('needs-prep');
+  } else if (item.stock >= item.needed && item.needed > 0) {
+    row.classList.add('stocked');
+  }
+
+  const name = document.createElement('span');
+  name.className = 'ingredient-name';
+  name.textContent = item.displayName;
+  row.appendChild(name);
+
+  // Stock controls
+  const controls = document.createElement('div');
+  controls.className = 'stock-controls';
+
+  const minusBtn = document.createElement('button');
+  minusBtn.className = 'stock-btn';
+  minusBtn.textContent = '−';
+  minusBtn.addEventListener('click', async () => {
+    const success = await updateStockApi(item.ingredient, -1);
+    if (success) loadInventory();
+  });
+
+  const stockCount = document.createElement('span');
+  stockCount.className = 'stock-count';
+  stockCount.textContent = item.stock;
+
+  const plusBtn = document.createElement('button');
+  plusBtn.className = 'stock-btn';
+  plusBtn.textContent = '+';
+  plusBtn.addEventListener('click', async () => {
+    const success = await updateStockApi(item.ingredient, 1);
+    if (success) loadInventory();
+  });
+
+  controls.appendChild(minusBtn);
+  controls.appendChild(stockCount);
+  controls.appendChild(plusBtn);
+  row.appendChild(controls);
+
+  // Needed count
+  const needed = document.createElement('span');
+  needed.className = 'needed-count';
+  needed.textContent = `need ${item.needed}`;
+  row.appendChild(needed);
+
+  // To make count
+  const toMake = document.createElement('span');
+  toMake.className = 'to-make-count' + (item.toMake === 0 ? ' zero' : '');
+  toMake.textContent = item.toMake > 0 ? `make ${item.toMake}` : 'ready';
+  row.appendChild(toMake);
+
+  return row;
+}
+
+/**
+ * Renders the inventory page.
+ */
+function renderInventory(data) {
+  const container = document.getElementById('week-view');
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
+
+  const view = document.createElement('div');
+  view.className = 'inventory-view';
+
+  // Header with lookahead selector
+  const header = document.createElement('div');
+  header.className = 'inventory-header';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Baby Meal Inventory';
+  header.appendChild(title);
+
+  const selector = document.createElement('div');
+  selector.className = 'lookahead-selector';
+  [3, 5, 7].forEach(days => {
+    const btn = document.createElement('button');
+    btn.className = 'lookahead-btn' + (days === inventoryLookahead ? ' active' : '');
+    btn.textContent = `${days}d`;
+    btn.addEventListener('click', () => {
+      inventoryLookahead = days;
+      loadInventory();
+    });
+    selector.appendChild(btn);
+  });
+  header.appendChild(selector);
+  view.appendChild(header);
+
+  // Empty state
+  if (data.items.length === 0 && data.otherStock.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'inventory-empty';
+    empty.textContent = `No baby meals planned for the next ${data.lookahead} days.`;
+    view.appendChild(empty);
+    container.appendChild(view);
+    return;
+  }
+
+  // Group items by category
+  const grouped = {};
+  for (const item of data.items) {
+    const cat = item.category || '';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  }
+
+  // Render categories in order
+  for (const cat of CATEGORY_ORDER) {
+    if (!grouped[cat] || grouped[cat].length === 0) continue;
+
+    const section = document.createElement('div');
+    section.className = 'inventory-category';
+
+    const catTitle = document.createElement('h3');
+    catTitle.textContent = CATEGORY_LABELS[cat] || cat;
+    section.appendChild(catTitle);
+
+    for (const item of grouped[cat]) {
+      section.appendChild(createInventoryItem(item));
+    }
+
+    view.appendChild(section);
+  }
+
+  // Other stock section
+  if (data.otherStock.length > 0) {
+    const label = document.createElement('div');
+    label.className = 'inventory-section-label';
+    label.textContent = 'Other Stock';
+    view.appendChild(label);
+
+    for (const item of data.otherStock) {
+      view.appendChild(createInventoryItem(item));
+    }
+  }
+
+  container.appendChild(view);
+}
+
+/**
+ * Loads and renders the inventory page.
+ */
+async function loadInventory() {
+  try {
+    const data = await fetchInventory();
+    renderInventory(data);
+  } catch {
+    // Error already shown
+  }
+}
+
+/**
+ * Switches between meal plan and inventory views.
+ */
+function showPage(page) {
+  currentPage = page;
+
+  // Toggle header element visibility
+  const weekNav = document.querySelector('.week-nav');
+  const inventoryBtn = document.getElementById('inventory-btn');
+  const historyBtn = document.getElementById('history-btn');
+  const copyBtn = document.getElementById('copy-btn');
+
+  if (page === 'inventory') {
+    weekNav.style.display = 'none';
+    historyBtn.style.display = 'none';
+    copyBtn.style.display = 'none';
+    inventoryBtn.textContent = 'Meal Plan';
+    loadInventory();
+  } else {
+    weekNav.style.display = '';
+    historyBtn.style.display = '';
+    copyBtn.style.display = '';
+    inventoryBtn.textContent = 'Inventory';
+    loadWeek();
+  }
+}
+
+// Inventory button handler
+document.getElementById('inventory-btn').addEventListener('click', () => {
+  showPage(currentPage === 'inventory' ? 'meals' : 'inventory');
+});
 
 // Initialize the app
 loadWeek();
