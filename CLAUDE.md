@@ -53,9 +53,15 @@ npm run deploy     # Build and rsync to production server
 ### App API (used by frontend)
 - `GET /api/weeks/:weekOf` - Get week data (creates if not exists)
 - `PUT /api/weeks/:weekOf/days/:day` - Update a day's meals (day: 0-6)
+- `PUT /api/weeks/:weekOf/days/:day/consume` - Mark baby meal as consumed
+- `PUT /api/weeks/:weekOf/days/:day/unconsume` - Unmark baby meal as consumed
 - `GET /api/weeks` - List all saved weeks
 - `POST /api/weeks/:weekOf/copy` - Copy week to new date
 - `DELETE /api/weeks/:weekOf` - Delete a week
+
+### Inventory API
+- `GET /api/inventory?lookahead=N&today=YYYY-MM-DD` - Get inventory status (N: 3, 5, or 7 days)
+- `PUT /api/inventory/:ingredient` - Update stock level (body: `{stock: N}` or `{delta: N}`)
 
 ### Public API (for Home Assistant/MagTag)
 - `GET /api/schedule/current` - Current week's meals
@@ -72,8 +78,13 @@ npm run deploy     # Build and rsync to production server
 - Baby breakfast: `baby_breakfast_cereal`, `baby_breakfast_fruit`, `baby_breakfast_yogurt`
 - Baby lunch: `baby_lunch_meat`, `baby_lunch_vegetable`, `baby_lunch_fruit`
 - Baby dinner: `baby_dinner_meat`, `baby_dinner_vegetable`, `baby_dinner_fruit`
+- Consumed flags: `baby_breakfast_consumed`, `baby_lunch_consumed`, `baby_dinner_consumed` (0/1)
 - Adult: `adult_dinner`
 - `note` - Day-level note field
+
+**inventory** table:
+- `ingredient` (TEXT, PRIMARY KEY, normalized lowercase)
+- `stock` (INTEGER, current quantity on hand)
 
 ## Frontend Notes
 
@@ -83,6 +94,14 @@ npm run deploy     # Build and rsync to production server
 - Clicking "Today" button scrolls to today's card
 - Meal section order: Adult Dinner → Baby Breakfast → Baby Lunch → Baby Dinner
 - Emoji icons on section headers (🍽️ 🥣 🍼 👶)
+
+### Inventory Page
+- Accessed via "Inventory" button in header
+- Shows baby meal ingredients needed vs stock on hand
+- Configurable lookahead: 3, 5, or 7 days
+- Ingredients grouped: "Items to Make" (needed > stock) vs "Other Stock"
+- Stock adjustable via +/- buttons
+- Baby meal sections have checkmark toggles to mark meals as consumed
 
 ## MagTag Display
 
