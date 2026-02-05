@@ -16,6 +16,9 @@ import './types/index.js'; // Import for Express Request extension
 
 const app = express();
 
+// Trust first reverse proxy (e.g. nginx) so rate limiter sees real client IPs
+app.set('trust proxy', 1);
+
 /**
  * API key for write operations.
  * Set via MEAL_PLANNER_API_KEY environment variable.
