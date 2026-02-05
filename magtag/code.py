@@ -22,7 +22,7 @@ import socketpool
 import digitalio
 import analogio
 import adafruit_requests
-import neopixel
+# import neopixel
 from adafruit_display_text.label import Label
 
 # ── Config ──────────────────────────────────────────────────
@@ -38,7 +38,7 @@ HEADER_H = 28
 LOW_BATTERY_V = 3.5
 DEBOUNCE_S = 0.3
 
-leds = neopixel.NeoPixel(board.NEOPIXEL, 4, brightness=0.03)
+# leds = neopixel.NeoPixel(board.NEOPIXEL, 4, brightness=0.03)
 
 
 # ── Graphics primitives ─────────────────────────────────────
@@ -116,10 +116,10 @@ def init_buttons():
     return btns
 
 
-def flash(color, dur=0.15):
-    leds.fill(color)
-    time.sleep(dur)
-    leds.fill((0, 0, 0))
+# def flash(color, dur=0.15):
+    # leds.fill(color)
+    # time.sleep(dur)
+    # leds.fill((0, 0, 0))
 
 
 # ── Network ─────────────────────────────────────────────────
@@ -135,7 +135,7 @@ def get_mac():
 def connect():
     if wifi.radio.connected:
         return
-    leds.fill((255, 0, 0))
+    # leds.fill((255, 0, 0))
     print("Connecting to WiFi...")
     wifi.radio.connect(
         os.getenv("CIRCUITPY_WIFI_SSID"),
@@ -145,13 +145,13 @@ def connect():
 
 
 def fetch_today(session):
-    leds.fill((0, 0, 255))
+    # leds.fill((0, 0, 255))
     url = f"{API_BASE}/api/schedule/upcoming"
     print(f"Fetching {url}")
     resp = session.get(url)
     data = resp.json()
     resp.close()
-    leds.fill((0, 0, 0))
+    # leds.fill((0, 0, 0))
     return data["days"][0], data.get("updated_at", "")
 
 
@@ -279,18 +279,64 @@ def render_error(msg, batt=None):
 
 
 # ── Deep sleep ──────────────────────────────────────────────
+# def deep_sleep():
+#     leds.fill((0, 0, 0))
+#     try:
+#         import alarm
+
+#         ta = alarm.time.TimeAlarm(
+#             monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
+#         )
+#         print(f"Deep sleeping for {REFRESH_MINUTES} minutes")
+#         alarm.exit_and_deep_sleep_until_alarms(ta)
+#     except ImportError:
+#         print("Deep sleep not supported, sleeping in place")
+#         time.sleep(REFRESH_MINUTES * 60)
+# def deep_sleep():
+#     # 1. Turn off the actual LEDs
+#     leds.fill((0, 0, 0))
+#     leds.show()
+    
+#     # 2. Physically cut power to the NeoPixel/Sensor power rail
+#     # This is the "secret sauce" for the MagTag
+#     import digitalio
+#     import board
+#     power_pin = digitalio.DigitalInOut(board.NEOPIXEL_POWER)
+#     power_pin.direction = digitalio.Direction.OUTPUT
+#     power_pin.value = False  # False cuts power on the MagTag
+    
+#     try:
+#         import alarm
+#         print("Entering True Deep Sleep...")
+#         ta = alarm.time.TimeAlarm(
+#             monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
+#         )
+#         alarm.exit_and_deep_sleep_until_alarms(ta)
+#     except ImportError:
+#         time.sleep(REFRESH_MINUTES * 60)
+
 def deep_sleep():
-    leds.fill((0, 0, 0))
+    print("Preparing for deep sleep...")
+    
+    # 1. Properly shut down the NeoPixel object
+    # This usually releases the power gate pin automatically
+    # leds.fill((0, 0, 0))
+    # leds.show()
+    # leds.deinit() 
+
+    # 2. Ensure the display is not busy
+    # If the e-ink is still 'chemically' switching, it pulls mA
+    while board.DISPLAY.busy:
+        time.sleep(0.1)
+
     try:
         import alarm
-
         ta = alarm.time.TimeAlarm(
             monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
         )
         alarm.exit_and_deep_sleep_until_alarms(ta)
     except ImportError:
         time.sleep(REFRESH_MINUTES * 60)
-
 
 # ── Main ────────────────────────────────────────────────────
 mac = get_mac()
@@ -311,9 +357,9 @@ today = None
 updated_at = ""
 try:
     today, updated_at = fetch_today(session)
-    leds.fill((0, 0, 0))
+    # leds.fill((0, 0, 0))
 except Exception as e:
-    leds.fill((255, 50, 0))
+    # leds.fill((255, 50, 0))
     print(f"Error: {e}")
     render_error(e, batt)
     time.sleep(0.5)
@@ -344,7 +390,7 @@ while True:
 
     if pressed == 2:  # C — Refresh
         print("Refreshing data")
-        flash((0, 0, 255))
+        # flash((0, 0, 255))
         try:
             today, updated_at = fetch_today(session)
             batt = read_battery()
@@ -355,7 +401,7 @@ while True:
 
     elif pressed == 3:  # D — Sleep
         print("Entering deep sleep")
-        flash((255, 0, 0))
+        # flash((255, 0, 0))
         deep_sleep()
 
     time.sleep(0.1)
