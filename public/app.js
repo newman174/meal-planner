@@ -339,10 +339,58 @@ function createMealSection(title, sectionClass, fields, dayData) {
   const section = document.createElement('div');
   section.className = 'meal-section ' + sectionClass;
 
-  // Create h3 using safe DOM method (prevents XSS)
-  const h3 = document.createElement('h3');
-  h3.textContent = title;
-  section.appendChild(h3);
+  // Determine meal type from sectionClass (e.g., 'baby-breakfast' → 'baby_breakfast')
+  const mealType = sectionClass.replace('-', '_');
+  const isBabyMeal = mealType.startsWith('baby_');
+  const consumedKey = mealType + '_consumed';
+  const isConsumed = isBabyMeal && dayData[consumedKey] === 1;
+
+  if (isConsumed) {
+    section.classList.add('consumed-meal');
+  }
+
+  if (isBabyMeal) {
+    // Wrap h3 and toggle button in a header row
+    const headerRow = document.createElement('div');
+    headerRow.className = 'meal-header';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = title;
+    headerRow.appendChild(h3);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'consume-toggle' + (isConsumed ? ' consumed' : '');
+    toggleBtn.textContent = '✓';
+    toggleBtn.title = isConsumed ? 'Mark as not consumed' : 'Mark as consumed';
+    toggleBtn.addEventListener('click', async () => {
+      const currentlyConsumed = toggleBtn.classList.contains('consumed');
+      const action = currentlyConsumed ? 'unconsume' : 'consume';
+      try {
+        const res = await fetch(`/api/weeks/${currentWeekOf}/days/${dayData.day}/${action}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ meal: mealType }),
+        });
+        if (!res.ok) throw new Error(`Failed to ${action}: ${res.status}`);
+
+        toggleBtn.classList.toggle('consumed');
+        section.classList.toggle('consumed-meal');
+        toggleBtn.title = toggleBtn.classList.contains('consumed')
+          ? 'Mark as not consumed'
+          : 'Mark as consumed';
+      } catch (err) {
+        console.error(`Error ${action} meal:`, err);
+        showError(`Failed to ${action} meal. Please try again.`);
+      }
+    });
+
+    headerRow.appendChild(toggleBtn);
+    section.appendChild(headerRow);
+  } else {
+    const h3 = document.createElement('h3');
+    h3.textContent = title;
+    section.appendChild(h3);
+  }
 
   const grid = document.createElement('div');
   grid.className = 'meal-fields';
