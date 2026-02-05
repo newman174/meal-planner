@@ -124,6 +124,26 @@ function initSchema(): void {
 
     logger.info('Baby meal structure migration complete');
   }
+
+  // Migrate: add consumed columns to days table
+  const daysCols = (db.pragma('table_info(days)') as ColumnInfo[]).map(c => c.name);
+  if (!daysCols.includes('baby_breakfast_consumed')) {
+    db.exec(`
+      ALTER TABLE days ADD COLUMN baby_breakfast_consumed INTEGER DEFAULT 0;
+      ALTER TABLE days ADD COLUMN baby_lunch_consumed INTEGER DEFAULT 0;
+      ALTER TABLE days ADD COLUMN baby_dinner_consumed INTEGER DEFAULT 0;
+    `);
+    logger.info('Added consumed columns to days table');
+  }
+
+  // Create inventory table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient TEXT UNIQUE NOT NULL,
+      stock INTEGER DEFAULT 0
+    );
+  `);
 }
 
 /** Day names indexed by day number (0 = Monday, 6 = Sunday) */

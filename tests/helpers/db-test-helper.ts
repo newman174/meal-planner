@@ -36,8 +36,17 @@ export function createTestDb(): Database.Database {
       baby_dinner_fruit TEXT DEFAULT '',
       adult_dinner TEXT DEFAULT '',
       note TEXT DEFAULT '',
+      baby_breakfast_consumed INTEGER DEFAULT 0,
+      baby_lunch_consumed INTEGER DEFAULT 0,
+      baby_dinner_consumed INTEGER DEFAULT 0,
       FOREIGN KEY (week_id) REFERENCES weeks(id) ON DELETE CASCADE,
       UNIQUE(week_id, day)
+    );
+
+    CREATE TABLE IF NOT EXISTS inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient TEXT UNIQUE NOT NULL,
+      stock INTEGER DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_days_week_id ON days(week_id);

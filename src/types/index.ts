@@ -27,6 +27,9 @@ export interface DayRecord {
   baby_dinner_fruit: string;
   adult_dinner: string;
   note: string;
+  baby_breakfast_consumed: number;
+  baby_lunch_consumed: number;
+  baby_dinner_consumed: number;
 }
 
 /** Week with its associated days */
