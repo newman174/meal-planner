@@ -112,6 +112,28 @@ export interface CopyWeekRequest {
   targetWeekOf: string;
 }
 
+// ============ Inventory Types ============
+
+/** A single item in the inventory view */
+export interface InventoryItem {
+  ingredient: string;
+  displayName: string;
+  category: string;
+  stock: number;
+  needed: number;
+  toMake: number;
+}
+
+/** Response from GET /api/inventory */
+export interface InventoryResponse {
+  items: InventoryItem[];
+  otherStock: InventoryItem[];
+  lookahead: number;
+}
+
+/** Valid baby meal types for consume/unconsume */
+export type BabyMealType = 'baby_breakfast' | 'baby_lunch' | 'baby_dinner';
+
 // ============ Configuration Types ============
 
 /** Path resolver functions */

@@ -15,7 +15,9 @@ import type {
   FormattedWeek,
   UpcomingDay,
   DayFieldKey,
-  DateParts
+  DateParts,
+  InventoryItem,
+  InventoryResponse
 } from './types/index.js';
 
 const DB_PATH = config.paths.db(import.meta.dirname);
@@ -169,6 +171,22 @@ const ALLOWED_DAY_FIELDS: Record<DayFieldKey, string> = {
   'baby_dinner_fruit': 'baby_dinner_fruit',
   'adult_dinner': 'adult_dinner',
   'note': 'note'
+};
+
+/** Maps baby meal field name prefixes to their sub-fields */
+const BABY_MEAL_FIELDS: Record<string, { fields: string[]; category: Record<string, string> }> = {
+  baby_breakfast: {
+    fields: ['baby_breakfast_cereal', 'baby_breakfast_yogurt', 'baby_breakfast_fruit'],
+    category: { baby_breakfast_cereal: 'cereal', baby_breakfast_yogurt: 'yogurt', baby_breakfast_fruit: 'fruit' }
+  },
+  baby_lunch: {
+    fields: ['baby_lunch_meat', 'baby_lunch_vegetable', 'baby_lunch_fruit'],
+    category: { baby_lunch_meat: 'meat', baby_lunch_vegetable: 'vegetable', baby_lunch_fruit: 'fruit' }
+  },
+  baby_dinner: {
+    fields: ['baby_dinner_meat', 'baby_dinner_vegetable', 'baby_dinner_fruit'],
+    category: { baby_dinner_meat: 'meat', baby_dinner_vegetable: 'vegetable', baby_dinner_fruit: 'fruit' }
+  },
 };
 
 /**
@@ -478,6 +496,218 @@ function formatWeekForApi(weekData: WeekWithDays | null): FormattedWeek | null {
 }
 
 /**
+ * Normalizes an ingredient name for storage and comparison.
+ * Trims whitespace and lowercases the name.
+ */
+function normalizeIngredient(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Gets the current inventory status with needed ingredients for the lookahead period.
+ * @param lookahead - Number of days to look ahead for meal planning
+ * @param todayOverride - Optional date string to use as today (for testing)
+ */
+function getInventory(lookahead: number, todayOverride?: string): InventoryResponse {
+  const database = getDb();
+  const today = todayOverride ? new Date(todayOverride + 'T12:00:00') : getEasternNow();
+
+  // Helper to format Date as YYYY-MM-DDTHH:MM:SS string
+  // Adding time component avoids UTC/local timezone parsing issues in getMonday
+  const formatDateStr = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}T12:00:00`;
+  };
+
+  const dayRecords: DayRecord[] = [];
+  const weekOfsNeeded = new Set<string>();
+
+  for (let i = 0; i < lookahead; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const weekOf = getMonday(formatDateStr(d));
+    if (weekOf) weekOfsNeeded.add(weekOf);
+  }
+
+  const weeksCache: Record<string, WeekWithDays | null> = {};
+  for (const weekOf of weekOfsNeeded) {
+    weeksCache[weekOf] = getWeek(weekOf);
+  }
+
+  for (let i = 0; i < lookahead; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const weekOf = getMonday(formatDateStr(d));
+    const dow = d.getDay();
+    const dayIndex = dow === 0 ? 6 : dow - 1;
+
+    const week = weekOf ? weeksCache[weekOf] : null;
+    const dayData = week?.days.find(r => r.day === dayIndex);
+    if (dayData) dayRecords.push(dayData);
+  }
+
+  const ingredientMap = new Map<string, { displayName: string; category: string; needed: number }>();
+
+  for (const day of dayRecords) {
+    for (const [mealType, mealConfig] of Object.entries(BABY_MEAL_FIELDS)) {
+      const consumedKey = `${mealType}_consumed` as keyof DayRecord;
+      if (day[consumedKey]) continue;
+
+      for (const field of mealConfig.fields) {
+        const value = day[field as keyof DayRecord] as string;
+        if (!value || !value.trim()) continue;
+
+        const normalized = normalizeIngredient(value);
+        const existing = ingredientMap.get(normalized);
+        if (existing) {
+          existing.needed++;
+        } else {
+          ingredientMap.set(normalized, {
+            displayName: value.trim(),
+            category: mealConfig.category[field],
+            needed: 1,
+          });
+        }
+      }
+    }
+  }
+
+  const allStock = database.prepare('SELECT ingredient, stock FROM inventory').all() as { ingredient: string; stock: number }[];
+  const stockMap = new Map(allStock.map(r => [r.ingredient, r.stock]));
+
+  const items: InventoryItem[] = [];
+  for (const [ingredient, data] of ingredientMap) {
+    const stock = stockMap.get(ingredient) || 0;
+    items.push({
+      ingredient,
+      displayName: data.displayName,
+      category: data.category,
+      stock,
+      needed: data.needed,
+      toMake: Math.max(0, data.needed - stock),
+    });
+  }
+
+  const otherStock: InventoryItem[] = [];
+  for (const [ingredient, stock] of stockMap) {
+    if (stock > 0 && !ingredientMap.has(ingredient)) {
+      otherStock.push({
+        ingredient,
+        displayName: ingredient,
+        category: '',
+        stock,
+        needed: 0,
+        toMake: 0,
+      });
+    }
+  }
+
+  return { items, otherStock, lookahead };
+}
+
+/**
+ * Updates the stock level for an ingredient.
+ * @param ingredient - The ingredient name (will be normalized)
+ * @param update - Either an absolute stock value or a delta to apply
+ */
+function updateStock(ingredient: string, update: { stock?: number; delta?: number }): void {
+  const database = getDb();
+  const normalized = normalizeIngredient(ingredient);
+
+  if (update.stock !== undefined) {
+    database.prepare(
+      'INSERT INTO inventory (ingredient, stock) VALUES (?, ?) ON CONFLICT(ingredient) DO UPDATE SET stock = excluded.stock'
+    ).run(normalized, update.stock);
+  } else if (update.delta !== undefined) {
+    database.prepare(
+      'INSERT INTO inventory (ingredient, stock) VALUES (?, ?) ON CONFLICT(ingredient) DO UPDATE SET stock = stock + ?'
+    ).run(normalized, update.delta, update.delta);
+  }
+}
+
+/**
+ * Marks a baby meal as consumed and decrements inventory stock.
+ * Idempotent - calling multiple times has no additional effect.
+ * @param weekOf - The week containing the meal
+ * @param dayIndex - The day index (0 = Monday, 6 = Sunday)
+ * @param mealType - The meal type (baby_breakfast, baby_lunch, baby_dinner)
+ */
+function consumeMeal(weekOf: string, dayIndex: number, mealType: string): DayRecord | null {
+  const database = getDb();
+  const week = getWeek(weekOf);
+  if (!week) return null;
+
+  const day = week.days.find(d => d.day === dayIndex);
+  if (!day) return null;
+
+  const consumedKey = `${mealType}_consumed` as keyof DayRecord;
+  if (day[consumedKey]) return day;
+
+  const mealConfig = BABY_MEAL_FIELDS[mealType];
+  if (!mealConfig) return null;
+
+  const consumeTransaction = database.transaction(() => {
+    database.prepare(`UPDATE days SET ${mealType}_consumed = 1 WHERE week_id = ? AND day = ?`).run(week.id, dayIndex);
+
+    for (const field of mealConfig.fields) {
+      const value = day[field as keyof DayRecord] as string;
+      if (!value || !value.trim()) continue;
+      const normalized = normalizeIngredient(value);
+      database.prepare(
+        'INSERT INTO inventory (ingredient, stock) VALUES (?, -1) ON CONFLICT(ingredient) DO UPDATE SET stock = stock - 1'
+      ).run(normalized);
+    }
+  });
+
+  consumeTransaction();
+
+  const updatedWeek = getWeek(weekOf);
+  return updatedWeek?.days.find(d => d.day === dayIndex) || null;
+}
+
+/**
+ * Marks a baby meal as unconsumed and increments inventory stock.
+ * Idempotent - calling multiple times has no additional effect.
+ * @param weekOf - The week containing the meal
+ * @param dayIndex - The day index (0 = Monday, 6 = Sunday)
+ * @param mealType - The meal type (baby_breakfast, baby_lunch, baby_dinner)
+ */
+function unconsumeMeal(weekOf: string, dayIndex: number, mealType: string): DayRecord | null {
+  const database = getDb();
+  const week = getWeek(weekOf);
+  if (!week) return null;
+
+  const day = week.days.find(d => d.day === dayIndex);
+  if (!day) return null;
+
+  const consumedKey = `${mealType}_consumed` as keyof DayRecord;
+  if (!day[consumedKey]) return day;
+
+  const mealConfig = BABY_MEAL_FIELDS[mealType];
+  if (!mealConfig) return null;
+
+  const unconsumeTransaction = database.transaction(() => {
+    database.prepare(`UPDATE days SET ${mealType}_consumed = 0 WHERE week_id = ? AND day = ?`).run(week.id, dayIndex);
+
+    for (const field of mealConfig.fields) {
+      const value = day[field as keyof DayRecord] as string;
+      if (!value || !value.trim()) continue;
+      const normalized = normalizeIngredient(value);
+      database.prepare(
+        'INSERT INTO inventory (ingredient, stock) VALUES (?, 1) ON CONFLICT(ingredient) DO UPDATE SET stock = stock + 1'
+      ).run(normalized);
+    }
+  });
+
+  unconsumeTransaction();
+
+  const updatedWeek = getWeek(weekOf);
+  return updatedWeek?.days.find(d => d.day === dayIndex) || null;
+}
+
+/**
  * Closes the database connection.
  * Called during graceful shutdown to ensure WAL checkpoint completes.
  */
@@ -554,6 +784,11 @@ export {
   getEasternDateParts,
   DAY_NAMES,
   ALLOWED_DAY_FIELDS,
+  BABY_MEAL_FIELDS,
+  getInventory,
+  updateStock,
+  consumeMeal,
+  unconsumeMeal,
   closeDb,
   setTestDb,
   resetDb
