@@ -606,9 +606,9 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
     });
   }
 
-  // Merge pinned items with a valid category that weren't already included via meals
+  // Merge categorized inventory items that weren't already included via meals
   for (const row of allStock) {
-    if (row.pinned === 1 && CATEGORY_SET.has(row.category) && !usedIngredients.has(row.ingredient)) {
+    if (CATEGORY_SET.has(row.category) && !usedIngredients.has(row.ingredient) && (row.stock > 0 || row.pinned === 1)) {
       usedIngredients.add(row.ingredient);
       items.push({
         ingredient: row.ingredient,
@@ -617,7 +617,7 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
         stock: row.stock,
         needed: 0,
         toMake: 0,
-        pinned: true,
+        pinned: row.pinned === 1,
       });
     }
   }
