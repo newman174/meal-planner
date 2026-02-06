@@ -146,6 +146,16 @@ function initSchema(): void {
       stock INTEGER DEFAULT 0
     );
   `);
+
+  // Migrate: add category and pinned columns to inventory table
+  const invCols = (db.pragma('table_info(inventory)') as ColumnInfo[]).map(c => c.name);
+  if (!invCols.includes('category')) {
+    db.exec(`
+      ALTER TABLE inventory ADD COLUMN category TEXT DEFAULT '';
+      ALTER TABLE inventory ADD COLUMN pinned INTEGER DEFAULT 0;
+    `);
+    logger.info('Added category and pinned columns to inventory table');
+  }
 }
 
 /** Day names indexed by day number (0 = Monday, 6 = Sunday) */
@@ -574,12 +584,17 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
     }
   }
 
-  const allStock = database.prepare('SELECT ingredient, stock FROM inventory').all() as { ingredient: string; stock: number }[];
-  const stockMap = new Map(allStock.map(r => [r.ingredient, r.stock]));
+  const allStock = database.prepare('SELECT ingredient, stock, category, pinned FROM inventory').all() as { ingredient: string; stock: number; category: string; pinned: number }[];
+  const stockMap = new Map(allStock.map(r => [r.ingredient, { stock: r.stock, category: r.category, pinned: r.pinned }]));
 
   const items: InventoryItem[] = [];
+  const usedIngredients = new Set<string>();
+
   for (const [ingredient, data] of ingredientMap) {
-    const stock = stockMap.get(ingredient) || 0;
+    const inv = stockMap.get(ingredient);
+    const stock = inv?.stock || 0;
+    const pinned = inv?.pinned === 1;
+    usedIngredients.add(ingredient);
     items.push({
       ingredient,
       displayName: data.displayName,
@@ -587,19 +602,37 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
       stock,
       needed: data.needed,
       toMake: Math.max(0, data.needed - stock),
+      pinned,
     });
   }
 
-  const otherStock: InventoryItem[] = [];
-  for (const [ingredient, stock] of stockMap) {
-    if (stock > 0 && !ingredientMap.has(ingredient)) {
-      otherStock.push({
-        ingredient,
-        displayName: ingredient,
-        category: '',
-        stock,
+  // Merge pinned items with a valid category that weren't already included via meals
+  for (const row of allStock) {
+    if (row.pinned === 1 && CATEGORY_SET.has(row.category) && !usedIngredients.has(row.ingredient)) {
+      usedIngredients.add(row.ingredient);
+      items.push({
+        ingredient: row.ingredient,
+        displayName: row.ingredient,
+        category: row.category,
+        stock: row.stock,
         needed: 0,
         toMake: 0,
+        pinned: true,
+      });
+    }
+  }
+
+  const otherStock: InventoryItem[] = [];
+  for (const row of allStock) {
+    if (!usedIngredients.has(row.ingredient) && (row.stock > 0 || row.pinned === 1)) {
+      otherStock.push({
+        ingredient: row.ingredient,
+        displayName: row.ingredient,
+        category: row.category || '',
+        stock: row.stock,
+        needed: 0,
+        toMake: 0,
+        pinned: row.pinned === 1,
       });
     }
   }
@@ -625,6 +658,52 @@ function updateStock(ingredient: string, update: { stock?: number; delta?: numbe
       'INSERT INTO inventory (ingredient, stock) VALUES (?, ?) ON CONFLICT(ingredient) DO UPDATE SET stock = stock + ?'
     ).run(normalized, update.delta, update.delta);
   }
+}
+
+/** Valid categories for manual inventory items */
+const CATEGORY_SET = new Set(['meat', 'vegetable', 'fruit', 'cereal', 'yogurt']);
+
+/**
+ * Adds a manually pinned inventory item.
+ * Upserts with pinned=1, stock=0, and the given category.
+ * If the item already exists, upgrades it to pinned and sets the category.
+ */
+function addManualItem(ingredient: string, category: string): { ingredient: string; stock: number; category: string; pinned: number } {
+  const database = getDb();
+  const normalized = normalizeIngredient(ingredient);
+
+  database.prepare(
+    `INSERT INTO inventory (ingredient, stock, category, pinned)
+     VALUES (?, 0, ?, 1)
+     ON CONFLICT(ingredient) DO UPDATE SET pinned = 1, category = excluded.category`
+  ).run(normalized, category);
+
+  return database.prepare('SELECT ingredient, stock, category, pinned FROM inventory WHERE ingredient = ?')
+    .get(normalized) as { ingredient: string; stock: number; category: string; pinned: number };
+}
+
+/**
+ * Deletes a manually pinned inventory item.
+ * Only deletes if pinned=1 to protect auto-created items.
+ * Returns true if a row was deleted.
+ */
+function deleteManualItem(ingredient: string): boolean {
+  const database = getDb();
+  const normalized = normalizeIngredient(ingredient);
+  const result = database.prepare('DELETE FROM inventory WHERE ingredient = ? AND pinned = 1').run(normalized);
+  return result.changes > 0;
+}
+
+/**
+ * Unpins an inventory item (sets pinned = 0).
+ * Does NOT delete the row or reset stock — just clears the pin flag.
+ * Returns true if a row was updated.
+ */
+function unpinItem(ingredient: string): boolean {
+  const database = getDb();
+  const normalized = normalizeIngredient(ingredient);
+  const result = database.prepare('UPDATE inventory SET pinned = 0 WHERE ingredient = ? AND pinned = 1').run(normalized);
+  return result.changes > 0;
 }
 
 /**
@@ -787,6 +866,10 @@ export {
   BABY_MEAL_FIELDS,
   getInventory,
   updateStock,
+  addManualItem,
+  deleteManualItem,
+  unpinItem,
+  CATEGORY_SET,
   consumeMeal,
   unconsumeMeal,
   closeDb,

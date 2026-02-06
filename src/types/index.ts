@@ -122,6 +122,7 @@ export interface InventoryItem {
   stock: number;
   needed: number;
   toMake: number;
+  pinned?: boolean;
 }
 
 /** Response from GET /api/inventory */

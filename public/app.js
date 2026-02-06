@@ -679,6 +679,128 @@ async function updateStockApi(ingredient, delta) {
 }
 
 /**
+ * Adds a manual inventory item via POST /api/inventory.
+ */
+async function addManualItemApi(ingredient, category) {
+  try {
+    const res = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ingredient, category }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || `Failed to add item: ${res.status}`);
+    }
+    return true;
+  } catch (err) {
+    console.error('Error adding manual item:', err);
+    showError(err.message || 'Failed to add item. Please try again.');
+    return false;
+  }
+}
+
+/**
+ * Toggles the pinned state of an inventory item via PUT /api/inventory/:ingredient.
+ */
+async function togglePinApi(ingredient, pinned, category) {
+  try {
+    const body = pinned ? { pinned: true, category } : { pinned: false };
+    const res = await fetch(`/api/inventory/${encodeURIComponent(ingredient)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Failed to toggle pin: ${res.status}`);
+    return true;
+  } catch (err) {
+    console.error('Error toggling pin:', err);
+    showError('Failed to toggle pin. Please try again.');
+    return false;
+  }
+}
+
+/**
+ * Deletes a manual inventory item via DELETE /api/inventory/:ingredient.
+ */
+async function deleteManualItemApi(ingredient) {
+  try {
+    const res = await fetch(`/api/inventory/${encodeURIComponent(ingredient)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`Failed to delete item: ${res.status}`);
+    return true;
+  } catch (err) {
+    console.error('Error deleting manual item:', err);
+    showError('Failed to delete item. Please try again.');
+    return false;
+  }
+}
+
+/** Whether the add-item form is currently visible */
+let addItemFormVisible = false;
+
+/**
+ * Toggles the add-item inline form in the inventory view.
+ */
+function toggleAddItemForm() {
+  const existing = document.querySelector('.add-item-form');
+  if (existing) {
+    existing.remove();
+    addItemFormVisible = false;
+    return;
+  }
+  addItemFormVisible = true;
+
+  const header = document.querySelector('.inventory-header');
+  if (!header) return;
+
+  const form = document.createElement('div');
+  form.className = 'add-item-form';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'add-item-input';
+  input.placeholder = 'Ingredient name';
+  input.maxLength = MAX_FIELD_LENGTH;
+
+  const select = document.createElement('select');
+  select.className = 'add-item-select';
+  for (const cat of CATEGORY_ORDER) {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = CATEGORY_LABELS[cat];
+    select.appendChild(opt);
+  }
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'add-item-submit';
+  submitBtn.textContent = 'Add';
+
+  const doSubmit = async () => {
+    const name = input.value.trim();
+    if (!name) return;
+    const success = await addManualItemApi(name, select.value);
+    if (success) {
+      addItemFormVisible = false;
+      loadInventory();
+    }
+  };
+
+  submitBtn.addEventListener('click', doSubmit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doSubmit();
+  });
+
+  form.appendChild(input);
+  form.appendChild(select);
+  form.appendChild(submitBtn);
+
+  header.insertAdjacentElement('afterend', form);
+  input.focus();
+}
+
+/**
  * Creates an inventory item row element.
  */
 function createInventoryItem(item) {
@@ -694,6 +816,56 @@ function createInventoryItem(item) {
   name.className = 'ingredient-name';
   name.textContent = item.displayName;
   row.appendChild(name);
+
+  // Pin toggle button
+  const hasValidCategory = CATEGORY_ORDER.includes(item.category);
+  const pinBtn = document.createElement('button');
+  pinBtn.className = 'pin-toggle-btn' + (item.pinned ? ' pinned' : '');
+  pinBtn.innerHTML = '&#128204;';
+  pinBtn.title = item.pinned ? 'Unpin item' : 'Pin item';
+  pinBtn.addEventListener('click', async () => {
+    if (item.pinned) {
+      // Unpin — no category needed
+      const success = await togglePinApi(item.ingredient, false);
+      if (success) loadInventory();
+    } else if (hasValidCategory) {
+      // Pin with known category
+      const success = await togglePinApi(item.ingredient, true, item.category);
+      if (success) loadInventory();
+    } else {
+      // No valid category — show inline picker after the row
+      const existing = row.nextElementSibling?.classList.contains('pin-category-picker')
+        ? row.nextElementSibling : null;
+      if (existing) { existing.remove(); return; }
+      const picker = document.createElement('div');
+      picker.className = 'pin-category-picker';
+      for (const cat of CATEGORY_ORDER) {
+        const btn = document.createElement('button');
+        btn.className = 'pin-category-btn';
+        btn.textContent = CATEGORY_LABELS[cat];
+        btn.addEventListener('click', async () => {
+          const success = await togglePinApi(item.ingredient, true, cat);
+          if (success) loadInventory();
+        });
+        picker.appendChild(btn);
+      }
+      row.insertAdjacentElement('afterend', picker);
+    }
+  });
+  row.appendChild(pinBtn);
+
+  // Delete button for pinned items
+  if (item.pinned) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-item-btn';
+    deleteBtn.textContent = '×';
+    deleteBtn.title = 'Remove item';
+    deleteBtn.addEventListener('click', async () => {
+      const success = await deleteManualItemApi(item.ingredient);
+      if (success) loadInventory();
+    });
+    row.appendChild(deleteBtn);
+  }
 
   // Stock controls
   const controls = document.createElement('div');
@@ -727,7 +899,11 @@ function createInventoryItem(item) {
   // Needed count
   const needed = document.createElement('span');
   needed.className = 'needed-count';
-  needed.textContent = `need ${item.needed}`;
+  if (item.needed > 0) {
+    needed.textContent = `need ${item.needed}`;
+  } else {
+    needed.textContent = 'in stock';
+  }
   row.appendChild(needed);
 
   // To make count
@@ -743,6 +919,7 @@ function createInventoryItem(item) {
  * Renders the inventory page.
  */
 function renderInventory(data) {
+  addItemFormVisible = false;
   const container = document.getElementById('week-view');
   while (container.firstChild) {
     container.removeChild(container.firstChild);
@@ -772,13 +949,21 @@ function renderInventory(data) {
     selector.appendChild(btn);
   });
   header.appendChild(selector);
+
+  // Add Item button
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-item-btn';
+  addBtn.textContent = '+ Add Item';
+  addBtn.addEventListener('click', toggleAddItemForm);
+  header.appendChild(addBtn);
+
   view.appendChild(header);
 
   // Empty state
   if (data.items.length === 0 && data.otherStock.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'inventory-empty';
-    empty.textContent = `No baby meals planned for the next ${data.lookahead} days.`;
+    empty.textContent = `No baby meals planned for the next ${data.lookahead} days. Use "+ Add Item" to track ingredients manually.`;
     view.appendChild(empty);
     container.appendChild(view);
     return;

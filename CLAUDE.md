@@ -61,7 +61,9 @@ npm run deploy     # Build and rsync to production server
 
 ### Inventory API
 - `GET /api/inventory?lookahead=N&today=YYYY-MM-DD` - Get inventory status (N: 3, 5, or 7 days)
-- `PUT /api/inventory/:ingredient` - Update stock level (body: `{stock: N}` or `{delta: N}`)
+- `PUT /api/inventory/:ingredient` - Update stock level (body: `{stock: N}`, `{delta: N}`, or `{pinned: bool, category?: string}`)
+- `POST /api/inventory` - Add manual inventory item (body: `{ingredient, category}`)
+- `DELETE /api/inventory/:ingredient` - Delete a manual (pinned) inventory item
 
 ### Public API (for Home Assistant/MagTag)
 - `GET /api/schedule/current` - Current week's meals
@@ -83,8 +85,10 @@ npm run deploy     # Build and rsync to production server
 - `note` - Day-level note field
 
 **inventory** table:
-- `ingredient` (TEXT, PRIMARY KEY, normalized lowercase)
+- `ingredient` (TEXT, UNIQUE, normalized lowercase)
 - `stock` (INTEGER, current quantity on hand)
+- `category` (TEXT, one of: meat/vegetable/fruit/cereal/yogurt)
+- `pinned` (INTEGER, 0/1 — 1 = manually added, persists at stock=0)
 
 ## Frontend Notes
 
@@ -102,6 +106,9 @@ npm run deploy     # Build and rsync to production server
 - Ingredients grouped: "Items to Make" (needed > stock) vs "Other Stock"
 - Stock adjustable via +/- buttons
 - Baby meal sections have checkmark toggles to mark meals as consumed
+- "+ Add Item" button for manually adding ingredients with a category
+- Manual items are pinned (persist at stock=0) and can be deleted via × button
+- Pin toggle button on all items: click to pin (persist beyond lookahead) or unpin (revert to auto)
 
 ## MagTag Display
 

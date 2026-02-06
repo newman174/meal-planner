@@ -295,9 +295,9 @@ app.put('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient:
       return;
     }
 
-    const { stock, delta } = req.body as { stock?: number; delta?: number };
-    if (stock === undefined && delta === undefined) {
-      res.status(400).json({ error: 'Provide either "stock" (absolute) or "delta" (relative).' });
+    const { stock, delta, pinned, category } = req.body as { stock?: number; delta?: number; pinned?: boolean; category?: string };
+    if (stock === undefined && delta === undefined && pinned === undefined) {
+      res.status(400).json({ error: 'Provide "stock", "delta", or "pinned".' });
       return;
     }
 
@@ -311,13 +311,81 @@ app.put('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient:
     }
 
     const ingredient = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
-    db.updateStock(ingredient, { stock, delta });
+
+    if (pinned === true) {
+      if (!category || typeof category !== 'string' || !db.CATEGORY_SET.has(category)) {
+        res.status(400).json({ error: `When pinning, category must be one of: ${[...db.CATEGORY_SET].join(', ')}` });
+        return;
+      }
+      db.addManualItem(ingredient, category);
+    } else if (pinned === false) {
+      db.unpinItem(ingredient);
+    }
+
+    if (stock !== undefined || delta !== undefined) {
+      db.updateStock(ingredient, { stock, delta });
+    }
 
     const database = db.getDb();
-    const row = database.prepare('SELECT ingredient, stock FROM inventory WHERE ingredient = ?').get(ingredient) as { ingredient: string; stock: number } | undefined;
-    res.json(row || { ingredient, stock: 0 });
+    const row = database.prepare('SELECT ingredient, stock, category, pinned FROM inventory WHERE ingredient = ?').get(ingredient) as { ingredient: string; stock: number; category: string; pinned: number } | undefined;
+    res.json(row || { ingredient, stock: 0, category: '', pinned: 0 });
   } catch (err) {
     logger.error({ err, ingredient: req.params.ingredient }, 'Error updating inventory');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/inventory
+ * Adds a manually pinned inventory item with a category.
+ */
+app.post('/api/inventory', requireApiKey, (req: Request, res: Response) => {
+  try {
+    if (!isValidRequestBody(req.body)) {
+      res.status(400).json({ error: 'Invalid request body.' });
+      return;
+    }
+
+    const { ingredient, category } = req.body as { ingredient?: string; category?: string };
+
+    if (!ingredient || typeof ingredient !== 'string' || !ingredient.trim()) {
+      res.status(400).json({ error: 'ingredient is required and must be a non-empty string.' });
+      return;
+    }
+
+    if (ingredient.trim().length > config.maxFieldLength) {
+      res.status(400).json({ error: `ingredient must be ${config.maxFieldLength} characters or fewer.` });
+      return;
+    }
+
+    if (!category || typeof category !== 'string' || !db.CATEGORY_SET.has(category)) {
+      res.status(400).json({ error: `category must be one of: ${[...db.CATEGORY_SET].join(', ')}` });
+      return;
+    }
+
+    const result = db.addManualItem(ingredient, category);
+    res.status(201).json(result);
+  } catch (err) {
+    logger.error({ err }, 'Error adding manual inventory item');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * DELETE /api/inventory/:ingredient
+ * Deletes a manually pinned inventory item.
+ */
+app.delete('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient: string }>, res: Response) => {
+  try {
+    const ingredient = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+    const deleted = db.deleteManualItem(ingredient);
+    if (!deleted) {
+      res.status(404).json({ error: 'Item not found or not a manual item.' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, ingredient: req.params.ingredient }, 'Error deleting inventory item');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
