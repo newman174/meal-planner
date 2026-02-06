@@ -349,7 +349,7 @@ describe('API Endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.items).toHaveLength(1);
-      expect(res.body.items[0].ingredient).toBe('chicken');
+      expect(res.body.items[0].ingredient).toBe('Chicken');
       expect(res.body.items[0].needed).toBe(1);
     });
 
@@ -375,7 +375,7 @@ describe('API Endpoints', () => {
         .send({ stock: 5 });
 
       expect(res.status).toBe(200);
-      expect(res.body.ingredient).toBe('chicken');
+      expect(res.body.ingredient).toBe('Chicken');
       expect(res.body.stock).toBe(5);
     });
 
@@ -404,7 +404,7 @@ describe('API Endpoints', () => {
         .send({ stock: 5 });
 
       expect(res.status).toBe(200);
-      expect(res.body.ingredient).toBe('chicken');
+      expect(res.body.ingredient).toBe('Chicken');
     });
   });
 
@@ -458,6 +458,57 @@ describe('API Endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.baby_lunch_consumed).toBe(0);
+    });
+  });
+
+  describe('GET /api/version', () => {
+    it('returns version matching semver pattern', async () => {
+      const res = await client.get('/api/version');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('version');
+      expect(res.body.version).toMatch(/^\d+\.\d+\.\d+/);
+    });
+  });
+
+  describe('GET /api/lookahead', () => {
+    it('returns 7 days by default', async () => {
+      const res = await client.get('/api/lookahead');
+
+      expect(res.status).toBe(200);
+      expect(res.body.days).toHaveLength(7);
+      expect(res.body.count).toBe(7);
+    });
+
+    it('returns correct number of days for days=3', async () => {
+      const res = await client.get('/api/lookahead?days=3');
+
+      expect(res.status).toBe(200);
+      expect(res.body.days).toHaveLength(3);
+      expect(res.body.count).toBe(3);
+    });
+
+    it('each day has required fields', async () => {
+      const res = await client.get('/api/lookahead?days=3');
+
+      expect(res.status).toBe(200);
+      for (const day of res.body.days) {
+        expect(day).toHaveProperty('weekOf');
+        expect(day).toHaveProperty('dayIndex');
+        expect(day).toHaveProperty('date');
+        expect(day).toHaveProperty('dayName');
+        expect(day).toHaveProperty('fields');
+        expect(day.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(day.dayIndex).toBeGreaterThanOrEqual(0);
+        expect(day.dayIndex).toBeLessThanOrEqual(6);
+      }
+    });
+
+    it('returns 400 for invalid days value', async () => {
+      const res = await client.get('/api/lookahead?days=10');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('days');
     });
   });
 });

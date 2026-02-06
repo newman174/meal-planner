@@ -132,6 +132,15 @@ export interface InventoryResponse {
   lookahead: number;
 }
 
+/** A day in the look-ahead view with raw fields for inline editing */
+export interface LookaheadDay {
+  weekOf: string;     // Monday YYYY-MM-DD this day belongs to
+  dayIndex: number;   // 0-6
+  date: string;       // Actual date YYYY-MM-DD
+  dayName: string;
+  fields: DayRecord;  // Raw flat fields for editing
+}
+
 /** Valid baby meal types for consume/unconsume */
 export type BabyMealType = 'baby_breakfast' | 'baby_lunch' | 'baby_dinner';
 

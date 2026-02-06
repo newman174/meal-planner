@@ -92,11 +92,16 @@ let currentWeekOf = getMonday(new Date());
 /** Map of timer IDs for debounced saves, keyed by "dayIndex-fieldKey" */
 let saveTimers = {};
 
-/** Currently active page: 'meals' or 'inventory' */
-let currentPage = 'meals';
+// LocalStorage keys for persistent state
+const PAGE_KEY = 'currentPage';
+const LOOKAHEAD_DAYS_KEY = 'lookaheadDays';
+const INVENTORY_OPEN_KEY = 'inventoryOpen';
 
-/** Current lookahead days for inventory */
-let inventoryLookahead = 7;
+/** Currently active page: 'meals' or 'lookahead' */
+let currentPage = localStorage.getItem(PAGE_KEY) || 'meals';
+
+/** Shared lookahead day count for both schedule look-ahead and inventory */
+let lookaheadDayCount = parseInt(localStorage.getItem(LOOKAHEAD_DAYS_KEY), 10) || 7;
 
 /**
  * Calculates the Monday of the week containing the given date.
@@ -254,7 +259,7 @@ function clearAllSaveTimers() {
  * @param {string} field - Field key
  */
 function debouncedSave(input, weekOf, dayIndex, field) {
-  const timerId = `${dayIndex}-${field}`;
+  const timerId = `${weekOf}-${dayIndex}-${field}`;
   clearTimeout(saveTimers[timerId]);
   saveTimers[timerId] = setTimeout(async () => {
     input.classList.add('saving');
@@ -320,13 +325,13 @@ function renderWeek(weekData) {
     card.appendChild(noteInput);
 
     // Adult Dinner
-    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, day));
+    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, day, currentWeekOf));
     // Baby Breakfast
-    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, day));
+    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, day, currentWeekOf));
     // Baby Lunch
-    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, day));
+    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, day, currentWeekOf));
     // Baby Dinner
-    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, day));
+    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, day, currentWeekOf));
 
     container.appendChild(card);
   });
@@ -341,7 +346,7 @@ function renderWeek(weekData) {
  * @param {Object} dayData - Day data from API
  * @returns {HTMLElement} The section element
  */
-function createMealSection(title, sectionClass, fields, dayData) {
+function createMealSection(title, sectionClass, fields, dayData, weekOf) {
   const section = document.createElement('div');
   section.className = 'meal-section ' + sectionClass;
 
@@ -372,7 +377,7 @@ function createMealSection(title, sectionClass, fields, dayData) {
       const currentlyConsumed = toggleBtn.classList.contains('consumed');
       const action = currentlyConsumed ? 'unconsume' : 'consume';
       try {
-        const res = await fetch(`/api/weeks/${currentWeekOf}/days/${dayData.day}/${action}`, {
+        const res = await fetch(`/api/weeks/${weekOf}/days/${dayData.day}/${action}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ meal: mealType }),
@@ -414,7 +419,7 @@ function createMealSection(title, sectionClass, fields, dayData) {
     input.maxLength = MAX_FIELD_LENGTH;
 
     input.addEventListener('input', () => {
-      debouncedSave(input, currentWeekOf, dayData.day, f.key);
+      debouncedSave(input, weekOf, dayData.day, f.key);
     });
 
     grid.appendChild(label);
@@ -649,7 +654,7 @@ const CATEGORY_LABELS = {
  */
 async function fetchInventory() {
   try {
-    const res = await fetch(`/api/inventory?lookahead=${inventoryLookahead}`);
+    const res = await fetch(`/api/inventory?lookahead=${lookaheadDayCount}`);
     if (!res.ok) throw new Error(`Failed to fetch inventory: ${res.status}`);
     return res.json();
   } catch (err) {
@@ -916,14 +921,17 @@ function createInventoryItem(item) {
 }
 
 /**
- * Renders the inventory page.
+ * Renders inventory into the side panel.
  */
 function renderInventory(data) {
   addItemFormVisible = false;
-  const container = document.getElementById('week-view');
-  while (container.firstChild) {
-    container.removeChild(container.firstChild);
-  }
+  const panel = document.getElementById('inventory-panel');
+  // Keep the close button, remove everything else
+  const closeBtn = document.getElementById('inventory-panel-close');
+  while (panel.firstChild) panel.removeChild(panel.firstChild);
+  panel.appendChild(closeBtn);
+
+  const container = panel;
 
   const view = document.createElement('div');
   view.className = 'inventory-view';
@@ -940,11 +948,16 @@ function renderInventory(data) {
   selector.className = 'lookahead-selector';
   [3, 5, 7].forEach(days => {
     const btn = document.createElement('button');
-    btn.className = 'lookahead-btn' + (days === inventoryLookahead ? ' active' : '');
+    btn.className = 'lookahead-btn' + (days === lookaheadDayCount ? ' active' : '');
     btn.textContent = `${days}d`;
     btn.addEventListener('click', () => {
-      inventoryLookahead = days;
+      setLookaheadDays(days);
       loadInventory();
+      // Also refresh the schedule look-ahead if it's the active view
+      if (currentPage === 'lookahead') {
+        buildLookaheadSelector();
+        loadLookahead();
+      }
     });
     selector.appendChild(btn);
   });
@@ -1023,36 +1036,209 @@ async function loadInventory() {
 }
 
 /**
- * Switches between meal plan and inventory views.
+ * Switches between meal plan and look-ahead views.
  */
 function showPage(page) {
   currentPage = page;
+  localStorage.setItem(PAGE_KEY, page);
 
-  // Toggle header element visibility
   const weekNav = document.querySelector('.week-nav');
-  const inventoryBtn = document.getElementById('inventory-btn');
+  const lookaheadNav = document.getElementById('lookahead-nav');
   const historyBtn = document.getElementById('history-btn');
   const copyBtn = document.getElementById('copy-btn');
+  const lookaheadBtn = document.getElementById('lookahead-btn');
 
-  if (page === 'inventory') {
+  if (page === 'lookahead') {
     weekNav.style.display = 'none';
+    lookaheadNav.style.display = '';
     historyBtn.style.display = 'none';
     copyBtn.style.display = 'none';
-    inventoryBtn.textContent = 'Meal Plan';
-    loadInventory();
+    lookaheadBtn.textContent = 'Weekly';
+    buildLookaheadSelector();
+    loadLookahead();
   } else {
     weekNav.style.display = '';
+    lookaheadNav.style.display = 'none';
     historyBtn.style.display = '';
     copyBtn.style.display = '';
-    inventoryBtn.textContent = 'Inventory';
+    lookaheadBtn.textContent = 'Look Ahead';
     loadWeek();
   }
 }
 
-// Inventory button handler
-document.getElementById('inventory-btn').addEventListener('click', () => {
-  showPage(currentPage === 'inventory' ? 'meals' : 'inventory');
+/**
+ * Builds the 3/5/7 day selector for look-ahead view.
+ */
+function buildLookaheadSelector() {
+  const container = document.getElementById('lookahead-day-selector');
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  [3, 5, 7].forEach(days => {
+    const btn = document.createElement('button');
+    btn.className = 'lookahead-btn' + (days === lookaheadDayCount ? ' active' : '');
+    btn.textContent = `${days}d`;
+    btn.addEventListener('click', () => {
+      setLookaheadDays(days);
+      buildLookaheadSelector();
+      loadLookahead();
+      // Also refresh inventory if the panel is open
+      const panel = document.getElementById('inventory-panel');
+      if (panel && !panel.classList.contains('collapsed')) {
+        loadInventory();
+      }
+    });
+    container.appendChild(btn);
+  });
+}
+
+/**
+ * Updates the shared lookahead day count and persists to localStorage.
+ * Also refreshes inventory if the panel is open.
+ */
+function setLookaheadDays(days) {
+  lookaheadDayCount = days;
+  localStorage.setItem(LOOKAHEAD_DAYS_KEY, String(days));
+}
+
+/**
+ * Fetches lookahead data from the API.
+ */
+async function fetchLookahead(days) {
+  try {
+    const res = await fetch(`/api/lookahead?days=${days}`);
+    if (!res.ok) throw new Error(`Failed to fetch lookahead: ${res.status}`);
+    return res.json();
+  } catch (err) {
+    console.error('Error fetching lookahead:', err);
+    showError('Failed to load look-ahead data. Please try again.');
+    throw err;
+  }
+}
+
+/**
+ * Renders the look-ahead view.
+ */
+function renderLookahead(data) {
+  const container = document.getElementById('week-view');
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  const todayStr = formatDate(new Date());
+
+  data.days.forEach((lookaheadDay) => {
+    const card = document.createElement('div');
+    const isToday = lookaheadDay.date === todayStr;
+    card.className = 'day-card' + (isToday ? ' today' : '');
+    if (isToday) card.id = 'today-card';
+
+    const dateObj = new Date(lookaheadDay.date + 'T00:00:00');
+    const dateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    const header = document.createElement('h2');
+    header.textContent = lookaheadDay.dayName + ' ';
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'day-date';
+    dateSpan.textContent = dateLabel;
+    header.appendChild(dateSpan);
+    card.appendChild(header);
+
+    const dayData = lookaheadDay.fields;
+    const weekOf = lookaheadDay.weekOf;
+    const dayIndex = lookaheadDay.dayIndex;
+
+    // Use a proxy object so createMealSection sees .day
+    const dayProxy = { ...dayData, day: dayIndex };
+
+    // Day-level note
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.className = 'day-note';
+    noteInput.value = dayData.note || '';
+    noteInput.placeholder = 'Add a note...';
+    noteInput.maxLength = MAX_NOTE_LENGTH;
+    noteInput.addEventListener('input', () => {
+      debouncedSave(noteInput, weekOf, dayIndex, 'note');
+    });
+    card.appendChild(noteInput);
+
+    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, dayProxy, weekOf));
+    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, dayProxy, weekOf));
+    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, dayProxy, weekOf));
+    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, dayProxy, weekOf));
+
+    container.appendChild(card);
+  });
+}
+
+/**
+ * Loads and renders the look-ahead view.
+ */
+async function loadLookahead() {
+  clearAllSaveTimers();
+  try {
+    const data = await fetchLookahead(lookaheadDayCount);
+    renderLookahead(data);
+  } catch {
+    // Error already shown
+  }
+}
+
+// Look Ahead button handler
+document.getElementById('lookahead-btn').addEventListener('click', () => {
+  showPage(currentPage === 'lookahead' ? 'meals' : 'lookahead');
 });
 
+/**
+ * Toggles the inventory side panel open/closed.
+ */
+function toggleInventoryPanel() {
+  const panel = document.getElementById('inventory-panel');
+  const btn = document.getElementById('inventory-btn');
+  const isCollapsed = panel.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    panel.classList.remove('collapsed');
+    btn.textContent = 'Close Inv.';
+    localStorage.setItem(INVENTORY_OPEN_KEY, '1');
+    loadInventory();
+  } else {
+    panel.classList.add('collapsed');
+    btn.textContent = 'Inventory';
+    localStorage.setItem(INVENTORY_OPEN_KEY, '0');
+  }
+}
+
+// Inventory button handler — toggles side panel
+document.getElementById('inventory-btn').addEventListener('click', toggleInventoryPanel);
+
+// Inventory panel close button (mobile)
+document.getElementById('inventory-panel-close').addEventListener('click', toggleInventoryPanel);
+
+/**
+ * Fetches and displays the app version from the server.
+ */
+async function loadVersion() {
+  try {
+    const res = await fetch('/api/version');
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('app-version');
+    if (el) el.textContent = `v${data.version}`;
+  } catch {
+    // Non-critical — silently ignore
+  }
+}
+
 // Initialize the app
-loadWeek();
+loadVersion();
+
+// Restore persisted view state
+if (currentPage === 'lookahead') {
+  showPage('lookahead');
+} else {
+  loadWeek();
+}
+
+// Restore inventory panel state
+if (localStorage.getItem(INVENTORY_OPEN_KEY) === '1') {
+  toggleInventoryPanel();
+}

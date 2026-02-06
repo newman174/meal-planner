@@ -16,12 +16,15 @@
 </head>
 <body>
   <header>
-    <h1>Meal Planner</h1>
+    <h1>Meal Planner <span id="app-version" class="version-tag"></span></h1>
     <div class="week-nav">
       <button id="prev-week" aria-label="Previous week">&larr;</button>
       <span id="week-label"></span>
       <button id="next-week" aria-label="Next week">&rarr;</button>
       <button id="today-btn" class="btn-small">Today</button>
+    </div>
+    <div class="lookahead-nav" id="lookahead-nav" style="display:none">
+      <div class="lookahead-selector" id="lookahead-day-selector"></div>
     </div>
     <div class="header-actions">
       <button id="theme-toggle" class="btn-small" aria-label="Toggle dark mode">
@@ -29,11 +32,17 @@
       </button>
       <button id="history-btn" class="btn-small">History</button>
       <button id="copy-btn" class="btn-small">Copy Week</button>
+      <button id="lookahead-btn" class="btn-small">Look Ahead</button>
       <button id="inventory-btn" class="btn-small">Inventory</button>
     </div>
   </header>
 
-  <main id="week-view"></main>
+  <div class="app-layout">
+    <main id="week-view"></main>
+    <aside id="inventory-panel" class="inventory-panel collapsed">
+      <button id="inventory-panel-close" class="btn-close inventory-panel-close">&times;</button>
+    </aside>
+  </div>
 
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal">

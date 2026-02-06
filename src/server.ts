@@ -5,6 +5,8 @@
  * @module server
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -12,6 +14,10 @@ import config from './config.js';
 import * as db from './db.js';
 import logger from './logger.js';
 import './types/index.js'; // Import for Express Request extension
+
+// Read version from package.json at startup
+const packageJson = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf-8'));
+const APP_VERSION: string = packageJson.version;
 
 const app = express();
 
@@ -89,6 +95,38 @@ app.use(logger.requestMiddleware);
 
 // Static files
 app.use(express.static(config.paths.public(import.meta.dirname)));
+
+// --- Version endpoint ---
+
+/**
+ * GET /api/version
+ * Returns the application version from package.json.
+ */
+app.get('/api/version', (_req: Request, res: Response) => {
+  res.json({ version: APP_VERSION });
+});
+
+// --- Look-ahead endpoint ---
+
+/**
+ * GET /api/lookahead?days=N
+ * Returns raw day records for the upcoming N days (3, 5, or 7).
+ * Used by the look-ahead frontend view for inline editing.
+ */
+app.get('/api/lookahead', (req: Request, res: Response) => {
+  try {
+    const daysParam = parseInt(req.query.days as string, 10) || 7;
+    if (!VALID_LOOKAHEADS.includes(daysParam)) {
+      res.status(400).json({ error: 'Invalid days. Must be 3, 5, or 7.' });
+      return;
+    }
+    const days = db.getLookaheadDays(daysParam);
+    res.json({ days, count: days.length });
+  } catch (err) {
+    logger.error({ err }, 'Error fetching lookahead days');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // --- App API routes ---
 
@@ -262,7 +300,8 @@ app.put('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res
       return;
     }
 
-    const ingredient = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+    const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+    const ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
 
     if (pinned === true) {
       if (!category || typeof category !== 'string' || !db.CATEGORY_SET.has(category)) {
@@ -329,7 +368,8 @@ app.post('/api/inventory', (req: Request, res: Response) => {
  */
 app.delete('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res: Response) => {
   try {
-    const ingredient = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+    const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+    const ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
     const deleted = db.deleteManualItem(ingredient);
     if (!deleted) {
       res.status(404).json({ error: 'Item not found or not a manual item.' });

@@ -32,6 +32,16 @@ beforeAll(async () => {
         <button id="today-btn"></button>
         <button id="history-btn"></button>
         <button id="copy-btn"></button>
+        <button id="theme-toggle"><span class="theme-icon"></span></button>
+        <button id="inventory-btn"></button>
+        <button id="lookahead-btn"></button>
+        <div id="lookahead-nav" style="display:none"><div id="lookahead-day-selector"></div></div>
+        <span id="app-version"></span>
+        <div class="app-layout">
+          <aside id="inventory-panel" class="inventory-panel collapsed">
+            <button id="inventory-panel-close"></button>
+          </aside>
+        </div>
         <div id="modal-overlay" class="hidden">
           <span id="modal-title"></span>
           <div id="modal-body"></div>

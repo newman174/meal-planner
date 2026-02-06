@@ -78,7 +78,7 @@ describe('Inventory Database Schema', () => {
 
       const result = getInventory(7, '2025-01-06');
 
-      const chicken = result.items.find(i => i.ingredient === 'chicken');
+      const chicken = result.items.find(i => i.ingredient === 'Chicken');
       expect(chicken).toBeDefined();
       expect(chicken!.needed).toBe(2);
       expect(chicken!.stock).toBe(0);
@@ -92,7 +92,7 @@ describe('Inventory Database Schema', () => {
       db.prepare('UPDATE days SET baby_lunch_consumed = 1 WHERE week_id = ? AND day = 0').run(weekId);
 
       const result = getInventory(7, '2025-01-06');
-      const chicken = result.items.find(i => i.ingredient === 'chicken');
+      const chicken = result.items.find(i => i.ingredient === 'Chicken');
       expect(chicken!.needed).toBe(1);
     });
 
@@ -100,10 +100,10 @@ describe('Inventory Database Schema', () => {
       const weekId = insertTestWeek(db, '2025-01-06');
       updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
       updateTestDay(db, weekId, 1, { baby_lunch_meat: 'chicken' });
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 1);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
 
       const result = getInventory(7, '2025-01-06');
-      const chicken = result.items.find(i => i.ingredient === 'chicken');
+      const chicken = result.items.find(i => i.ingredient === 'Chicken');
       expect(chicken!.stock).toBe(1);
       expect(chicken!.needed).toBe(2);
       expect(chicken!.toMake).toBe(1);
@@ -124,7 +124,7 @@ describe('Inventory Database Schema', () => {
       updateTestDay(db, weekId, 1, { baby_dinner_meat: 'chicken' });
 
       const result = getInventory(7, '2025-01-06');
-      const chickenItems = result.items.filter(i => i.ingredient === 'chicken');
+      const chickenItems = result.items.filter(i => i.ingredient === 'Chicken');
       expect(chickenItems).toHaveLength(1);
       expect(chickenItems[0].needed).toBe(2);
       expect(chickenItems[0].displayName).toBe('Chicken');
@@ -141,11 +141,11 @@ describe('Inventory Database Schema', () => {
       });
 
       const result = getInventory(7, '2025-01-06');
-      expect(result.items.find(i => i.ingredient === 'oats')!.category).toBe('cereal');
-      expect(result.items.find(i => i.ingredient === 'plain')!.category).toBe('yogurt');
-      expect(result.items.find(i => i.ingredient === 'banana')!.category).toBe('fruit');
-      expect(result.items.find(i => i.ingredient === 'chicken')!.category).toBe('meat');
-      expect(result.items.find(i => i.ingredient === 'peas')!.category).toBe('vegetable');
+      expect(result.items.find(i => i.ingredient === 'Oats')!.category).toBe('cereal');
+      expect(result.items.find(i => i.ingredient === 'Plain')!.category).toBe('yogurt');
+      expect(result.items.find(i => i.ingredient === 'Banana')!.category).toBe('fruit');
+      expect(result.items.find(i => i.ingredient === 'Chicken')!.category).toBe('meat');
+      expect(result.items.find(i => i.ingredient === 'Peas')!.category).toBe('vegetable');
     });
 
     it('crosses week boundaries for lookahead', () => {
@@ -156,7 +156,7 @@ describe('Inventory Database Schema', () => {
       updateTestDay(db, weekId2, 0, { baby_lunch_meat: 'chicken' });
 
       const result = getInventory(7, '2025-01-11');
-      const chicken = result.items.find(i => i.ingredient === 'chicken');
+      const chicken = result.items.find(i => i.ingredient === 'Chicken');
       expect(chicken!.needed).toBe(2);
     });
   });
@@ -164,34 +164,34 @@ describe('Inventory Database Schema', () => {
   describe('updateStock', () => {
     it('creates new inventory row with absolute stock', () => {
       updateStock('chicken', { stock: 5 });
-      const row = db.prepare('SELECT * FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const row = db.prepare('SELECT * FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(5);
     });
 
     it('updates existing stock with absolute value', () => {
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 3);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 3);
       updateStock('chicken', { stock: 5 });
-      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(5);
     });
 
     it('applies delta to existing stock', () => {
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 3);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 3);
       updateStock('chicken', { delta: 2 });
-      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(5);
     });
 
     it('applies delta to non-existent ingredient (starts from 0)', () => {
       updateStock('peas', { delta: -1 });
-      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('peas') as { stock: number };
+      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Peas') as { stock: number };
       expect(row.stock).toBe(-1);
     });
 
     it('normalizes ingredient name', () => {
       updateStock('  Chicken  ', { stock: 5 });
-      const row = db.prepare('SELECT * FROM inventory WHERE ingredient = ?').get('chicken') as { ingredient: string; stock: number };
-      expect(row.ingredient).toBe('chicken');
+      const row = db.prepare('SELECT * FROM inventory WHERE ingredient = ?').get('Chicken') as { ingredient: string; stock: number };
+      expect(row.ingredient).toBe('Chicken');
       expect(row.stock).toBe(5);
     });
   });
@@ -200,16 +200,16 @@ describe('Inventory Database Schema', () => {
     it('consumeMeal sets flag and decrements stock', () => {
       const weekId = insertTestWeek(db, '2025-01-06');
       updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken', baby_lunch_vegetable: 'peas', baby_lunch_fruit: 'apple' });
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 3);
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('peas', 2);
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('apple', 1);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 3);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Peas', 2);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Apple', 1);
 
       consumeMeal('2025-01-06', 0, 'baby_lunch');
 
       const week = getWeek('2025-01-06');
       expect(week?.days[0].baby_lunch_consumed).toBe(1);
 
-      const chicken = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const chicken = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(chicken.stock).toBe(2);
     });
 
@@ -219,26 +219,26 @@ describe('Inventory Database Schema', () => {
 
       consumeMeal('2025-01-06', 0, 'baby_lunch');
 
-      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(-1);
     });
 
     it('consumeMeal is idempotent (does not double-decrement)', () => {
       const weekId = insertTestWeek(db, '2025-01-06');
       updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 3);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 3);
 
       consumeMeal('2025-01-06', 0, 'baby_lunch');
       consumeMeal('2025-01-06', 0, 'baby_lunch');
 
-      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(2);
     });
 
     it('unconsumeMeal clears flag and increments stock', () => {
       const weekId = insertTestWeek(db, '2025-01-06');
       updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 2);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 2);
 
       consumeMeal('2025-01-06', 0, 'baby_lunch');
       unconsumeMeal('2025-01-06', 0, 'baby_lunch');
@@ -246,20 +246,20 @@ describe('Inventory Database Schema', () => {
       const week = getWeek('2025-01-06');
       expect(week?.days[0].baby_lunch_consumed).toBe(0);
 
-      const chicken = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const chicken = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(chicken.stock).toBe(2);
     });
 
     it('unconsumeMeal is idempotent (does not double-increment)', () => {
       const weekId = insertTestWeek(db, '2025-01-06');
       updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
-      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('chicken', 3);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 3);
 
       consumeMeal('2025-01-06', 0, 'baby_lunch');
       unconsumeMeal('2025-01-06', 0, 'baby_lunch');
       unconsumeMeal('2025-01-06', 0, 'baby_lunch');
 
-      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('chicken') as { stock: number };
+      const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(3);
     });
   });

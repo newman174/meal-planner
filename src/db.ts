@@ -14,6 +14,7 @@ import type {
   WeekWithDays,
   FormattedWeek,
   UpcomingDay,
+  LookaheadDay,
   DayFieldKey,
   DateParts,
   InventoryItem,
@@ -155,6 +156,32 @@ function initSchema(): void {
       ALTER TABLE inventory ADD COLUMN pinned INTEGER DEFAULT 0;
     `);
     logger.info('Added category and pinned columns to inventory table');
+  }
+
+  // Migrate: capitalize first letter of ingredient names (merge duplicates)
+  const lowercaseRows = db.prepare(
+    "SELECT id, ingredient, stock, category, pinned FROM inventory WHERE ingredient != '' AND UPPER(SUBSTR(ingredient, 1, 1)) || SUBSTR(ingredient, 2) != ingredient"
+  ).all() as { id: number; ingredient: string; stock: number; category: string; pinned: number }[];
+  if (lowercaseRows.length > 0) {
+    const findExisting = db.prepare('SELECT id, stock, pinned FROM inventory WHERE ingredient = ?');
+    const mergeDelete = db.prepare('DELETE FROM inventory WHERE id = ?');
+    const mergeUpdate = db.prepare('UPDATE inventory SET stock = ?, pinned = MAX(pinned, ?) WHERE id = ?');
+    const renameUpdate = db.prepare('UPDATE inventory SET ingredient = ? WHERE id = ?');
+    const capitalize = db.transaction(() => {
+      for (const row of lowercaseRows) {
+        const capitalized = row.ingredient.charAt(0).toUpperCase() + row.ingredient.slice(1);
+        const existing = findExisting.get(capitalized) as { id: number; stock: number; pinned: number } | undefined;
+        if (existing) {
+          // Merge: sum stock, keep highest pinned, delete the lowercase row
+          mergeUpdate.run(existing.stock + row.stock, row.pinned, existing.id);
+          mergeDelete.run(row.id);
+        } else {
+          renameUpdate.run(capitalized, row.id);
+        }
+      }
+    });
+    capitalize();
+    logger.info({ count: lowercaseRows.length }, 'Capitalized inventory ingredient names');
   }
 }
 
@@ -473,6 +500,68 @@ function getUpcomingDays(count: number): UpcomingDay[] {
   return results;
 }
 
+/** Default empty day record fields (used when no data exists for a day) */
+const EMPTY_DAY_FIELDS: Omit<DayRecord, 'id' | 'week_id' | 'day'> = {
+  baby_breakfast_cereal: '',
+  baby_breakfast_fruit: '',
+  baby_breakfast_yogurt: '',
+  baby_lunch_meat: '',
+  baby_lunch_vegetable: '',
+  baby_lunch_fruit: '',
+  baby_dinner_meat: '',
+  baby_dinner_vegetable: '',
+  baby_dinner_fruit: '',
+  adult_dinner: '',
+  note: '',
+  baby_breakfast_consumed: 0,
+  baby_lunch_consumed: 0,
+  baby_dinner_consumed: 0,
+};
+
+/**
+ * Gets raw day records for the upcoming N days starting from today.
+ * Returns LookaheadDay[] with weekOf/dayIndex metadata for inline editing.
+ * Does NOT auto-create weeks — empty fields are returned for missing data.
+ */
+function getLookaheadDays(count: number): LookaheadDay[] {
+  const today = getEasternNow();
+
+  const dates: DateInfo[] = [];
+  const weekOfsNeeded = new Set<string>();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const weekOf = getMonday(d);
+    if (weekOf) weekOfsNeeded.add(weekOf);
+    const dow = d.getDay();
+    const dayIndex = dow === 0 ? 6 : dow - 1;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    dates.push({ dateStr: `${y}-${m}-${dd}`, weekOf, dayIndex });
+  }
+
+  const weeksCache: Record<string, WeekWithDays | null> = {};
+  for (const weekOf of weekOfsNeeded) {
+    weeksCache[weekOf] = getWeek(weekOf);
+  }
+
+  const results: LookaheadDay[] = [];
+  for (const { dateStr, weekOf, dayIndex } of dates) {
+    const week = weekOf ? weeksCache[weekOf] : null;
+    const dayData = week?.days.find(r => r.day === dayIndex) ?? null;
+
+    results.push({
+      weekOf: weekOf || '',
+      dayIndex,
+      date: dateStr,
+      dayName: DAY_NAMES[dayIndex],
+      fields: dayData || { id: 0, week_id: 0, day: dayIndex, ...EMPTY_DAY_FIELDS },
+    });
+  }
+  return results;
+}
+
 /**
  * Deletes a week and all its associated days (via CASCADE).
  */
@@ -510,7 +599,8 @@ function formatWeekForApi(weekData: WeekWithDays | null): FormattedWeek | null {
  * Trims whitespace and lowercases the name.
  */
 function normalizeIngredient(name: string): string {
-  return name.trim().toLowerCase();
+  const lower = name.trim().toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /**
@@ -834,6 +924,7 @@ export {
   deleteWeek,
   formatWeekForApi,
   getUpcomingDays,
+  getLookaheadDays,
   getEasternTimeString,
   getEasternDateParts,
   DAY_NAMES,
