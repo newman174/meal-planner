@@ -118,6 +118,30 @@ The MagTag fetches from `/api/schedule/upcoming` and displays:
 - Shows MAC address and IP on loading screen
 - Configured via `magtag/settings.toml`
 
+## Versioning
+
+This project uses **semantic versioning** (semver). The version in `package.json` is the source of truth.
+
+### When committing changes, determine the version bump:
+- **patch** (1.0.0 → 1.0.1): Bug fixes, typo corrections, minor tweaks
+- **minor** (1.0.0 → 1.1.0): New features, new API endpoints, new UI pages/sections
+- **major** (1.0.0 → 2.0.0): Breaking changes to API contracts (endpoints used by MagTag/Home Assistant)
+
+### After committing, run the appropriate bump command:
+```bash
+npm version patch   # bug fixes
+npm version minor   # new features
+npm version major   # breaking API changes
+```
+
+This automatically: updates package.json, creates a git commit, creates a git tag, and pushes to remote.
+
+### Rules:
+- **Always bump the version after completing a feature or fix** — do not leave the version stale
+- If multiple features/fixes are committed together, use the highest applicable bump (feat + fix = minor)
+- The `preversion` script runs typecheck + tests — if they fail, fix them before versioning
+- Do NOT manually edit the `version` field in package.json — always use `npm version`
+
 ## Timezone
 
 All date calculations use **America/New_York** (US Eastern).
