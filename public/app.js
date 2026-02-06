@@ -266,6 +266,7 @@ function debouncedSave(input, weekOf, dayIndex, field) {
     const success = await saveField(weekOf, dayIndex, field, input.value);
     if (success) {
       setTimeout(() => input.classList.remove('saving'), SAVE_FEEDBACK_DURATION_MS);
+      refreshInventoryIfOpen();
     } else {
       input.classList.remove('saving');
       input.classList.add('error');
@@ -389,6 +390,7 @@ function createMealSection(title, sectionClass, fields, dayData, weekOf) {
         toggleBtn.title = toggleBtn.classList.contains('consumed')
           ? 'Mark as not consumed'
           : 'Mark as consumed';
+        refreshInventoryIfOpen();
       } catch (err) {
         console.error(`Error ${action} meal:`, err);
         showError(`Failed to ${action} meal. Please try again.`);
@@ -1186,6 +1188,16 @@ async function loadLookahead() {
 document.getElementById('lookahead-btn').addEventListener('click', () => {
   showPage(currentPage === 'lookahead' ? 'meals' : 'lookahead');
 });
+
+/**
+ * Refreshes the inventory panel if it is currently open.
+ */
+function refreshInventoryIfOpen() {
+  const panel = document.getElementById('inventory-panel');
+  if (panel && !panel.classList.contains('collapsed')) {
+    loadInventory();
+  }
+}
 
 /**
  * Toggles the inventory side panel open/closed.
