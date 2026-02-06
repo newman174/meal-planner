@@ -268,15 +268,15 @@ function getEasternTimeString(): string {
  * Used to normalize dates to week boundaries.
  */
 function getMonday(date: Date | string): string | null {
-  const d = date instanceof Date ? getEasternNow() : new Date(date as string);
-  if (!(date instanceof Date)) {
-    // If a string was passed, parse it as-is
-    const parsed = new Date(date as string);
-    if (isNaN(parsed.getTime())) {
+  let d: Date;
+  if (date instanceof Date) {
+    d = new Date(date.getTime());
+  } else {
+    d = new Date(date);
+    if (isNaN(d.getTime())) {
       logger.warn({ date }, 'Invalid date passed to getMonday');
       return null;
     }
-    d.setFullYear(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
   }
   const day = d.getDay();
   // Convert Sunday (0) to 6, otherwise subtract 1 to get days since Monday

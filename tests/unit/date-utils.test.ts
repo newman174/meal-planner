@@ -6,10 +6,6 @@ import { describe, it, expect } from 'vitest';
 import { getMonday, getEasternDateParts } from '../../src/db.js';
 
 describe('getMonday (string input)', () => {
-  // Note: getMonday() has two behaviors:
-  // - String input: Parses the date and finds its Monday
-  // - Date input: Ignores it, uses getEasternNow() instead (for current week)
-  //
   // IMPORTANT: JavaScript parses 'YYYY-MM-DD' as UTC midnight, which can be
   // the previous day in Eastern time. Use 'YYYY-MM-DDT12:00:00' to avoid
   // timezone issues in tests.
@@ -70,6 +66,46 @@ describe('getMonday (string input)', () => {
     // 2024-02-29 is a Thursday (leap year), Monday was 2024-02-26
     const result = getMonday('2024-02-29T12:00:00');
     expect(result).toBe('2024-02-26');
+  });
+});
+
+describe('getMonday (Date input)', () => {
+  // getMonday must work with Date objects too — used by getLookaheadDays
+  // and getUpcomingDays to find the week a future date belongs to.
+
+  it('returns correct Monday for a Date in the current week', () => {
+    // Use a fixed date to avoid flakiness: 2025-01-08 (Wednesday)
+    const date = new Date(2025, 0, 8, 12, 0, 0); // Jan 8, 2025, noon local
+    const result = getMonday(date);
+    expect(result).toBe('2025-01-06');
+  });
+
+  it('returns correct Monday for a Date in a different week', () => {
+    // 2025-01-15 (Wednesday) — Monday is Jan 13, NOT Jan 6
+    const date = new Date(2025, 0, 15, 12, 0, 0);
+    const result = getMonday(date);
+    expect(result).toBe('2025-01-13');
+  });
+
+  it('returns correct Monday for a Date several weeks out', () => {
+    // 2025-02-10 (Monday) — Monday is Feb 10 itself
+    const date = new Date(2025, 1, 10, 12, 0, 0);
+    const result = getMonday(date);
+    expect(result).toBe('2025-02-10');
+  });
+
+  it('handles Sunday Date (returns previous Monday)', () => {
+    // 2025-01-19 (Sunday) — Monday was Jan 13
+    const date = new Date(2025, 0, 19, 12, 0, 0);
+    const result = getMonday(date);
+    expect(result).toBe('2025-01-13');
+  });
+
+  it('does not mutate the input Date', () => {
+    const date = new Date(2025, 0, 15, 12, 0, 0);
+    const originalTime = date.getTime();
+    getMonday(date);
+    expect(date.getTime()).toBe(originalTime);
   });
 });
 
