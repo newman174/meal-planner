@@ -46,7 +46,9 @@ export function createTestDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS inventory (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ingredient TEXT UNIQUE NOT NULL,
-      stock INTEGER DEFAULT 0
+      stock INTEGER DEFAULT 0,
+      category TEXT DEFAULT '',
+      pinned INTEGER DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_days_week_id ON days(week_id);
