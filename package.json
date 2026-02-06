@@ -14,14 +14,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "deploy": "npm run build && rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' --exclude src --exclude logs ./ root@192.168.50.193:~/meal-planner/"
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:logs": "pm2 logs --raw | pino-pretty",
+    "deploy": "npm run build && rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' --exclude src --exclude logs --exclude .claude ./ root@192.168.50.193:~/meal-planner/"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",
     "express": "^4.21.0",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
-    "pino": "^9.0.0"
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -30,7 +33,6 @@
     "@types/supertest": "^6.0.3",
     "@vitest/coverage-v8": "^4.0.18",
     "jsdom": "^28.0.0",
-    "pino-pretty": "^11.0.0",
     "supertest": "^7.2.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

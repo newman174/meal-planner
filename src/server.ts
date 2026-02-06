@@ -1,14 +1,13 @@
 /**
  * @fileoverview Express server for the Meal Planner application.
  * Provides REST API endpoints for managing weekly meal plans.
- * Includes rate limiting, security headers, and optional API key authentication.
+ * Includes rate limiting and security headers.
  * @module server
  */
 
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import crypto from 'crypto';
 import config from './config.js';
 import * as db from './db.js';
 import logger from './logger.js';
@@ -18,17 +17,6 @@ const app = express();
 
 // Trust first reverse proxy (e.g. nginx) so rate limiter sees real client IPs
 app.set('trust proxy', 1);
-
-/**
- * API key for write operations.
- * Set via MEAL_PLANNER_API_KEY environment variable.
- * If not set, authentication is disabled (development mode).
- */
-const API_KEY = process.env.MEAL_PLANNER_API_KEY;
-
-if (!API_KEY) {
-  logger.warn('MEAL_PLANNER_API_KEY not set - write operations are unprotected. Set this in production!');
-}
 
 // Middleware setup
 app.use(express.json({ limit: config.maxJsonBodySize }));
@@ -96,39 +84,6 @@ function isValidRequestBody(body: unknown): body is Record<string, unknown> {
   return body !== null && typeof body === 'object' && !Array.isArray(body);
 }
 
-/**
- * Authentication middleware for write operations.
- * Checks for X-API-Key header when MEAL_PLANNER_API_KEY is set.
- * Skips authentication if no API key is configured (development mode).
- */
-function requireApiKey(req: Request, res: Response, next: NextFunction): void {
-  // Skip auth if no API key is configured (development mode)
-  if (!API_KEY) {
-    next();
-    return;
-  }
-
-  const providedKey = req.get('X-API-Key');
-
-  if (!providedKey) {
-    logger.warn({ method: req.method, path: req.path }, 'Missing API key');
-    res.status(401).json({ error: 'API key required. Include X-API-Key header.' });
-    return;
-  }
-
-  // Use timing-safe comparison to prevent timing attacks
-  const keyBuffer = Buffer.from(API_KEY);
-  const providedBuffer = Buffer.from(providedKey);
-
-  if (keyBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(keyBuffer, providedBuffer)) {
-    logger.warn({ method: req.method, path: req.path }, 'Invalid API key');
-    res.status(403).json({ error: 'Invalid API key' });
-    return;
-  }
-
-  next();
-}
-
 // Request logging middleware
 app.use(logger.requestMiddleware);
 
@@ -158,9 +113,8 @@ app.get('/api/weeks/:weekOf', (req: Request<{ weekOf: string }>, res: Response) 
 /**
  * PUT /api/weeks/:weekOf/days/:day
  * Updates a specific day's meals.
- * Requires API key authentication if configured.
- */
-app.put('/api/weeks/:weekOf/days/:day', requireApiKey, (req: Request<{ weekOf: string; day: string }>, res: Response) => {
+*/
+app.put('/api/weeks/:weekOf/days/:day', (req: Request<{ weekOf: string; day: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
       res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
@@ -204,9 +158,8 @@ app.get('/api/weeks', (_req: Request, res: Response) => {
 /**
  * POST /api/weeks/:weekOf/copy
  * Copies all meal data from one week to another.
- * Requires API key authentication if configured.
- */
-app.post('/api/weeks/:weekOf/copy', requireApiKey, (req: Request<{ weekOf: string }>, res: Response) => {
+*/
+app.post('/api/weeks/:weekOf/copy', (req: Request<{ weekOf: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
       res.status(400).json({ error: 'Invalid source date format. Use YYYY-MM-DD' });
@@ -242,9 +195,8 @@ app.post('/api/weeks/:weekOf/copy', requireApiKey, (req: Request<{ weekOf: strin
 /**
  * DELETE /api/weeks/:weekOf
  * Deletes a week and all its associated days.
- * Requires API key authentication if configured.
- */
-app.delete('/api/weeks/:weekOf', requireApiKey, (req: Request<{ weekOf: string }>, res: Response) => {
+*/
+app.delete('/api/weeks/:weekOf', (req: Request<{ weekOf: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
       res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
@@ -288,7 +240,7 @@ app.get('/api/inventory', (req: Request, res: Response) => {
  * PUT /api/inventory/:ingredient
  * Updates stock for an ingredient (absolute or delta).
  */
-app.put('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient: string }>, res: Response) => {
+app.put('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res: Response) => {
   try {
     if (!isValidRequestBody(req.body)) {
       res.status(400).json({ error: 'Invalid request body.' });
@@ -339,7 +291,7 @@ app.put('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient:
  * POST /api/inventory
  * Adds a manually pinned inventory item with a category.
  */
-app.post('/api/inventory', requireApiKey, (req: Request, res: Response) => {
+app.post('/api/inventory', (req: Request, res: Response) => {
   try {
     if (!isValidRequestBody(req.body)) {
       res.status(400).json({ error: 'Invalid request body.' });
@@ -375,7 +327,7 @@ app.post('/api/inventory', requireApiKey, (req: Request, res: Response) => {
  * DELETE /api/inventory/:ingredient
  * Deletes a manually pinned inventory item.
  */
-app.delete('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredient: string }>, res: Response) => {
+app.delete('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res: Response) => {
   try {
     const ingredient = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
     const deleted = db.deleteManualItem(ingredient);
@@ -394,7 +346,7 @@ app.delete('/api/inventory/:ingredient', requireApiKey, (req: Request<{ ingredie
  * PUT /api/weeks/:weekOf/days/:day/consume
  * Marks a baby meal as consumed and decrements ingredient stock.
  */
-app.put('/api/weeks/:weekOf/days/:day/consume', requireApiKey, (req: Request<{ weekOf: string; day: string }>, res: Response) => {
+app.put('/api/weeks/:weekOf/days/:day/consume', (req: Request<{ weekOf: string; day: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
       res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
@@ -433,7 +385,7 @@ app.put('/api/weeks/:weekOf/days/:day/consume', requireApiKey, (req: Request<{ w
  * PUT /api/weeks/:weekOf/days/:day/unconsume
  * Unmarks a baby meal as consumed and increments ingredient stock.
  */
-app.put('/api/weeks/:weekOf/days/:day/unconsume', requireApiKey, (req: Request<{ weekOf: string; day: string }>, res: Response) => {
+app.put('/api/weeks/:weekOf/days/:day/unconsume', (req: Request<{ weekOf: string; day: string }>, res: Response) => {
   try {
     if (!isValidWeekOf(req.params.weekOf)) {
       res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
@@ -544,10 +496,28 @@ export { app, isValidWeekOf, isValidRequestBody };
 // Start server only when run directly (not imported for tests)
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     logger.info({ port: config.port }, 'Meal Planner server started');
-    if (API_KEY) {
-      logger.info('API key authentication enabled for write operations');
-    }
+  });
+
+  function shutdown(signal: string) {
+    logger.info(`Received ${signal}, shutting down gracefully`);
+    server.close(() => {
+      db.closeDb();
+      process.exit(0);
+    });
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('uncaughtException', (err: Error) => {
+    logger.fatal({ err }, 'Uncaught exception, closing database and exiting');
+    db.closeDb();
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason: unknown) => {
+    logger.fatal({ reason }, 'Unhandled promise rejection');
+    db.closeDb();
+    process.exit(1);
   });
 }

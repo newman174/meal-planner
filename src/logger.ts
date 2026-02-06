@@ -4,7 +4,8 @@
  * @module logger
  */
 
-import pino, { Logger, TransportSingleOptions } from 'pino';
+import pino, { Logger } from 'pino';
+import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
 import type { Request, Response, NextFunction } from 'express';
@@ -21,33 +22,57 @@ if (!fs.existsSync(LOG_DIR)) {
 }
 
 /**
- * Create pino transport configuration based on environment.
- * In development: pretty print to console.
- * In production: JSON to file with rotation support.
+ * Check if a module is available without importing it.
  */
-function getTransport(): TransportSingleOptions {
+function isModuleAvailable(name: string): boolean {
+  try {
+    createRequire(import.meta.url).resolve(name);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build pino transport targets based on environment and available modules.
+ * In development: pretty print to console (falls back to plain JSON stdout).
+ * In production: always JSON to stdout, plus file rotation if pino-roll is available.
+ */
+function createTransport(): ReturnType<typeof pino.transport> | undefined {
   if (NODE_ENV === 'development') {
-    return {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname'
-      }
-    };
+    if (isModuleAvailable('pino-pretty')) {
+      return pino.transport({
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname'
+        }
+      });
+    }
+    // pino-pretty not available — fall back to default stdout (no transport)
+    return undefined;
   }
 
-  // Production: use pino-roll for log rotation
-  return {
-    target: 'pino-roll',
-    options: {
-      file: path.join(LOG_DIR, 'app'),
-      frequency: 'daily',
-      mkdir: true,
-      size: '10m',
-      extension: '.log'
-    }
-  };
+  // Production: always include stdout, optionally add file rotation
+  const targets: pino.TransportTargetOptions[] = [
+    { target: 'pino/file', options: { destination: 1 } }
+  ];
+
+  if (isModuleAvailable('pino-roll')) {
+    targets.push({
+      target: 'pino-roll',
+      options: {
+        file: path.join(LOG_DIR, 'app'),
+        frequency: 'daily',
+        mkdir: true,
+        size: '10m',
+        extension: '.log'
+      }
+    });
+  }
+
+  return pino.transport({ targets });
 }
 
 /**
@@ -58,10 +83,7 @@ const baseConfig: pino.LoggerOptions = {
   base: {
     env: NODE_ENV
   },
-  timestamp: pino.stdTimeFunctions.isoTime,
-  formatters: {
-    level: (label: string) => ({ level: label })
-  }
+  timestamp: pino.stdTimeFunctions.isoTime
 };
 
 /** Extended logger interface with custom methods */
@@ -72,20 +94,16 @@ interface CustomLogger extends Logger {
 
 /**
  * Create the logger instance.
- * Falls back to basic console transport if pino-pretty/pino-roll not available.
+ * Always logs to stdout. File transport is added when pino-roll is available.
  */
 let logger: CustomLogger;
 
-try {
-  logger = pino(baseConfig, pino.transport(getTransport())) as CustomLogger;
-} catch (err) {
-  // Fallback if transport modules not installed
-  logger = pino({
-    ...baseConfig,
-    transport: undefined
-  }) as CustomLogger;
-  const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-  logger.warn({ err: errorMessage }, 'Using basic logger - install pino-pretty (dev) or pino-roll (prod) for better output');
+const transport = createTransport();
+if (transport) {
+  logger = pino(baseConfig, transport) as CustomLogger;
+} else {
+  // No transport — pino writes JSON to stdout by default
+  logger = pino(baseConfig) as CustomLogger;
 }
 
 /**

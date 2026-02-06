@@ -798,32 +798,7 @@ function closeDb(): void {
   }
 }
 
-// Graceful shutdown handlers - close database connection
-process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, shutting down gracefully');
-  closeDb();
-  process.exit(0);
-});
 
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT, shutting down gracefully');
-  closeDb();
-  process.exit(0);
-});
-
-// Handle uncaught exceptions to prevent database connection leaks
-process.on('uncaughtException', (err: Error) => {
-  logger.fatal({ err }, 'Uncaught exception, closing database and exiting');
-  closeDb();
-  process.exit(1);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason: unknown) => {
-  logger.fatal({ reason }, 'Unhandled promise rejection');
-  closeDb();
-  process.exit(1);
-});
 
 // ============ Test Helpers ============
 
