@@ -144,6 +144,21 @@ export interface LookaheadDay {
 /** Valid baby meal types for consume/unconsume */
 export type BabyMealType = 'baby_breakfast' | 'baby_lunch' | 'baby_dinner';
 
+// ============ Allocation Types ============
+
+/** Whether an ingredient is covered by stock for a specific meal field */
+export type AllocationStatus = 'allocated' | 'unallocated' | 'consumed';
+
+/** Per-date map of field keys to allocation statuses */
+export interface AllocationMap {
+  [date: string]: { [fieldKey: string]: AllocationStatus };
+}
+
+/** Response from GET /api/inventory/allocation */
+export interface AllocationResponse {
+  allocation: AllocationMap;
+}
+
 // ============ Configuration Types ============
 
 /** Path resolver functions */

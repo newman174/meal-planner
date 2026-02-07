@@ -331,6 +331,61 @@ describe('API Endpoints', () => {
     });
   });
 
+  describe('GET /api/inventory/allocation', () => {
+    it('returns allocation map for planned meals with stock', async () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+
+      const res = await client.get('/api/inventory/allocation?weekOf=2025-01-06&today=2025-01-06');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('allocation');
+      expect(res.body.allocation['2025-01-06']).toBeDefined();
+      expect(res.body.allocation['2025-01-06'].baby_lunch_meat).toBe('allocated');
+    });
+
+    it('returns unallocated when no stock', async () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+
+      const res = await client.get('/api/inventory/allocation?weekOf=2025-01-06&today=2025-01-06');
+
+      expect(res.status).toBe(200);
+      expect(res.body.allocation['2025-01-06'].baby_lunch_meat).toBe('unallocated');
+    });
+
+    it('returns empty allocation when no meals planned', async () => {
+      const res = await client.get('/api/inventory/allocation?weekOf=2025-01-06&today=2025-01-06');
+
+      expect(res.status).toBe(200);
+      expect(res.body.allocation).toEqual({});
+    });
+
+    it('returns 400 when weekOf is missing', async () => {
+      const res = await client.get('/api/inventory/allocation');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('weekOf');
+    });
+
+    it('returns 400 for invalid weekOf format', async () => {
+      const res = await client.get('/api/inventory/allocation?weekOf=bad-date');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('weekOf');
+    });
+
+    it('does not match as :ingredient param', async () => {
+      // Verify the route ordering is correct — "allocation" should NOT be treated
+      // as an ingredient name by PUT /api/inventory/:ingredient
+      const res = await client.get('/api/inventory/allocation?weekOf=2025-01-06&today=2025-01-06');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('allocation');
+    });
+  });
+
   describe('GET /api/inventory', () => {
     it('returns empty inventory with no meals planned', async () => {
       const res = await client.get('/api/inventory?lookahead=7');

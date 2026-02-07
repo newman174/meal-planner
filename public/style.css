@@ -1120,3 +1120,58 @@ html {
   box-shadow: none;
   transform: none;
 }
+
+/* ── Allocation Indicators ── */
+.meal-fields input.alloc-ok {
+  border-left: 3px solid var(--save-color);
+}
+
+.meal-fields input.alloc-needed {
+  border-left: 3px solid #f59e0b;
+}
+
+[data-theme="dark"] .meal-fields input.alloc-needed {
+  border-left-color: #d97706;
+}
+
+/* ── Inventory Filter Buttons ── */
+.inventory-filter-group {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-button);
+  border-radius: 10px;
+  padding: 3px;
+  box-shadow: var(--shadow-button);
+  width: 100%;
+}
+
+.filter-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.filter-btn:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  color: var(--text-primary);
+}
+
+.filter-btn.active {
+  background: var(--gradient-primary);
+  color: white;
+  font-weight: 600;
+}
+
+.filter-btn.active:hover {
+  background: var(--gradient-primary-hover);
+  transform: none;
+  box-shadow: none;
+}

@@ -254,6 +254,27 @@ const VALID_LOOKAHEADS = [3, 5, 7];
 const VALID_MEAL_TYPES = ['baby_breakfast', 'baby_lunch', 'baby_dinner'];
 
 /**
+ * GET /api/inventory/allocation
+ * Returns per-day, per-field allocation map showing whether each baby meal
+ * ingredient is covered by available stock.
+ */
+app.get('/api/inventory/allocation', (req: Request, res: Response) => {
+  try {
+    const weekOf = req.query.weekOf as string;
+    if (!weekOf || !isValidWeekOf(weekOf)) {
+      res.status(400).json({ error: 'weekOf query parameter required in YYYY-MM-DD format.' });
+      return;
+    }
+    const todayOverride = req.query.today as string | undefined;
+    const result = db.getAllocation(weekOf, todayOverride);
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, 'Error fetching allocation');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * GET /api/inventory
  * Returns inventory items with needed counts and stock levels.
  */

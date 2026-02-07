@@ -97,8 +97,16 @@ const PAGE_KEY = 'currentPage';
 const LOOKAHEAD_DAYS_KEY = 'lookaheadDays';
 const INVENTORY_OPEN_KEY = 'inventoryOpen';
 
+const INVENTORY_FILTER_KEY = 'inventoryFilter';
+
 /** Currently active page: 'meals' or 'lookahead' */
 let currentPage = localStorage.getItem(PAGE_KEY) || 'meals';
+
+/** Current allocation data from the server */
+let currentAllocation = {};
+
+/** Active inventory filter: 'all', 'needs-prep', or 'in-stock' */
+let inventoryFilter = localStorage.getItem(INVENTORY_FILTER_KEY) || 'all';
 
 /** Shared lookahead day count for both schedule look-ahead and inventory */
 let lookaheadDayCount = parseInt(localStorage.getItem(LOOKAHEAD_DAYS_KEY), 10) || 7;
@@ -190,6 +198,22 @@ async function fetchWeek(weekOf) {
 }
 
 /**
+ * Fetches allocation data from the API for a given week.
+ * @param {string} weekOf - Monday date in YYYY-MM-DD format
+ * @returns {Promise<Object>} Allocation map { allocation: { date: { field: status } } }
+ */
+async function fetchAllocation(weekOf) {
+  try {
+    const res = await fetch(`/api/inventory/allocation?weekOf=${weekOf}`);
+    if (!res.ok) throw new Error(`Failed to fetch allocation: ${res.status}`);
+    return res.json();
+  } catch (err) {
+    console.error('Error fetching allocation:', err);
+    return { allocation: {} };
+  }
+}
+
+/**
  * Displays an error toast message.
  * Removes any existing toast first.
  * @param {string} message - Error message to display
@@ -267,6 +291,7 @@ function debouncedSave(input, weekOf, dayIndex, field) {
     if (success) {
       setTimeout(() => input.classList.remove('saving'), SAVE_FEEDBACK_DURATION_MS);
       refreshInventoryIfOpen();
+      refreshAllocationIndicators();
     } else {
       input.classList.remove('saving');
       input.classList.add('error');
@@ -326,13 +351,13 @@ function renderWeek(weekData) {
     card.appendChild(noteInput);
 
     // Adult Dinner
-    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, day, currentWeekOf));
+    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, day, currentWeekOf, dateStr));
     // Baby Breakfast
-    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, day, currentWeekOf));
+    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, day, currentWeekOf, dateStr));
     // Baby Lunch
-    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, day, currentWeekOf));
+    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, day, currentWeekOf, dateStr));
     // Baby Dinner
-    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, day, currentWeekOf));
+    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, day, currentWeekOf, dateStr));
 
     container.appendChild(card);
   });
@@ -345,9 +370,11 @@ function renderWeek(weekData) {
  * @param {string} sectionClass - CSS class for the section
  * @param {Array<Object>} fields - Field definitions
  * @param {Object} dayData - Day data from API
+ * @param {string} weekOf - Monday date in YYYY-MM-DD format
+ * @param {string} dateStr - Actual date (YYYY-MM-DD) for allocation lookups
  * @returns {HTMLElement} The section element
  */
-function createMealSection(title, sectionClass, fields, dayData, weekOf) {
+function createMealSection(title, sectionClass, fields, dayData, weekOf, dateStr) {
   const section = document.createElement('div');
   section.className = 'meal-section ' + sectionClass;
 
@@ -391,6 +418,7 @@ function createMealSection(title, sectionClass, fields, dayData, weekOf) {
           ? 'Mark as not consumed'
           : 'Mark as consumed';
         refreshInventoryIfOpen();
+        refreshAllocationIndicators();
       } catch (err) {
         console.error(`Error ${action} meal:`, err);
         showError(`Failed to ${action} meal. Please try again.`);
@@ -420,6 +448,18 @@ function createMealSection(title, sectionClass, fields, dayData, weekOf) {
     input.placeholder = f.label;
     input.maxLength = MAX_FIELD_LENGTH;
 
+    // Allocation indicator data attributes
+    if (dateStr) {
+      input.dataset.date = dateStr;
+      input.dataset.field = f.key;
+      const allocStatus = currentAllocation[dateStr]?.[f.key];
+      if (allocStatus === 'allocated') {
+        input.classList.add('alloc-ok');
+      } else if (allocStatus === 'unallocated') {
+        input.classList.add('alloc-needed');
+      }
+    }
+
     input.addEventListener('input', () => {
       debouncedSave(input, weekOf, dayData.day, f.key);
     });
@@ -441,7 +481,11 @@ async function loadWeek() {
   clearAllSaveTimers();
 
   try {
-    const data = await fetchWeek(currentWeekOf);
+    const [data, allocData] = await Promise.all([
+      fetchWeek(currentWeekOf),
+      fetchAllocation(currentWeekOf),
+    ]);
+    currentAllocation = allocData.allocation || {};
     renderWeek(data);
   } catch {
     // Error already shown by fetchWeek
@@ -813,6 +857,9 @@ function toggleAddItemForm() {
 function createInventoryItem(item) {
   const row = document.createElement('div');
   row.className = 'inventory-item';
+  row.dataset.stock = item.stock;
+  row.dataset.needed = item.needed;
+  row.dataset.toMake = item.toMake;
   if (item.toMake > 0) {
     row.classList.add('needs-prep');
   } else if (item.stock >= item.needed && item.needed > 0) {
@@ -972,6 +1019,30 @@ function renderInventory(data) {
   addBtn.addEventListener('click', toggleAddItemForm);
   header.appendChild(addBtn);
 
+  // Filter buttons
+  const filterGroup = document.createElement('div');
+  filterGroup.className = 'inventory-filter-group';
+  const filters = [
+    { key: 'all', label: 'All' },
+    { key: 'needs-prep', label: 'Needs Prep' },
+    { key: 'in-stock', label: 'In Stock' },
+    { key: 'unallocated', label: 'Surplus' },
+  ];
+  filters.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (inventoryFilter === f.key ? ' active' : '');
+    btn.textContent = f.label;
+    btn.addEventListener('click', () => {
+      inventoryFilter = f.key;
+      localStorage.setItem(INVENTORY_FILTER_KEY, f.key);
+      filterGroup.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyInventoryFilter();
+    });
+    filterGroup.appendChild(btn);
+  });
+  header.appendChild(filterGroup);
+
   view.appendChild(header);
 
   // Empty state
@@ -1023,6 +1094,54 @@ function renderInventory(data) {
   }
 
   container.appendChild(view);
+
+  // Apply active filter
+  applyInventoryFilter();
+}
+
+/**
+ * Shows/hides inventory items based on the active filter.
+ * Also hides category headers and section labels when all their items are hidden.
+ */
+function applyInventoryFilter() {
+  const panel = document.getElementById('inventory-panel');
+  if (!panel) return;
+
+  const items = panel.querySelectorAll('.inventory-item');
+  items.forEach(item => {
+    const stock = parseInt(item.dataset.stock) || 0;
+    const needed = parseInt(item.dataset.needed) || 0;
+    const toMake = parseInt(item.dataset.toMake) || 0;
+    let visible = true;
+    switch (inventoryFilter) {
+      case 'needs-prep': visible = toMake > 0; break;
+      case 'in-stock': visible = stock > 0; break;
+      case 'unallocated': visible = stock > needed; break;
+    }
+    item.style.display = visible ? '' : 'none';
+  });
+
+  // Hide category headers when all child items are hidden
+  const categories = panel.querySelectorAll('.inventory-category');
+  categories.forEach(cat => {
+    const visibleItems = cat.querySelectorAll('.inventory-item:not([style*="display: none"])');
+    cat.style.display = visibleItems.length > 0 ? '' : 'none';
+  });
+
+  // Hide "Other Stock" section label when all its items are hidden
+  const sectionLabels = panel.querySelectorAll('.inventory-section-label');
+  sectionLabels.forEach(label => {
+    let next = label.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('inventory-section-label') && !next.classList.contains('inventory-category')) {
+      if (next.classList.contains('inventory-item') && next.style.display !== 'none') {
+        hasVisible = true;
+        break;
+      }
+      next = next.nextElementSibling;
+    }
+    label.style.display = hasVisible ? '' : 'none';
+  });
 }
 
 /**
@@ -1162,10 +1281,10 @@ function renderLookahead(data) {
     });
     card.appendChild(noteInput);
 
-    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, dayProxy, weekOf));
-    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, dayProxy, weekOf));
-    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, dayProxy, weekOf));
-    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, dayProxy, weekOf));
+    card.appendChild(createMealSection('Adult Dinner', 'adult-dinner', FIELDS.adult_dinner, dayProxy, weekOf, lookaheadDay.date));
+    card.appendChild(createMealSection('Baby Breakfast', 'baby-breakfast', FIELDS.baby_breakfast, dayProxy, weekOf, lookaheadDay.date));
+    card.appendChild(createMealSection('Baby Lunch', 'baby-lunch', FIELDS.baby_lunch, dayProxy, weekOf, lookaheadDay.date));
+    card.appendChild(createMealSection('Baby Dinner', 'baby-dinner', FIELDS.baby_dinner, dayProxy, weekOf, lookaheadDay.date));
 
     container.appendChild(card);
   });
@@ -1177,7 +1296,12 @@ function renderLookahead(data) {
 async function loadLookahead() {
   clearAllSaveTimers();
   try {
-    const data = await fetchLookahead(lookaheadDayCount);
+    const todayMonday = getMonday(new Date());
+    const [data, allocData] = await Promise.all([
+      fetchLookahead(lookaheadDayCount),
+      fetchAllocation(todayMonday),
+    ]);
+    currentAllocation = allocData.allocation || {};
     renderLookahead(data);
   } catch {
     // Error already shown
@@ -1197,6 +1321,34 @@ function refreshInventoryIfOpen() {
   if (panel && !panel.classList.contains('collapsed')) {
     loadInventory();
   }
+}
+
+/**
+ * Re-fetches allocation data and updates indicator classes on existing inputs.
+ * Called after saves and consume/unconsume to keep indicators current.
+ */
+async function refreshAllocationIndicators() {
+  const weekOf = currentPage === 'lookahead' ? getMonday(new Date()) : currentWeekOf;
+  try {
+    const allocData = await fetchAllocation(weekOf);
+    currentAllocation = allocData.allocation || {};
+  } catch {
+    return;
+  }
+
+  // Update all inputs that have data-date and data-field attributes
+  const inputs = document.querySelectorAll('input[data-date][data-field]');
+  inputs.forEach(input => {
+    const dateStr = input.dataset.date;
+    const field = input.dataset.field;
+    input.classList.remove('alloc-ok', 'alloc-needed');
+    const status = currentAllocation[dateStr]?.[field];
+    if (status === 'allocated') {
+      input.classList.add('alloc-ok');
+    } else if (status === 'unallocated') {
+      input.classList.add('alloc-needed');
+    }
+  });
 }
 
 /**

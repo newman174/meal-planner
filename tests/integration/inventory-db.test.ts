@@ -7,6 +7,7 @@ import { setupTestDb, insertTestWeek, updateTestDay } from '../helpers/db-test-h
 import {
   getWeek,
   getInventory,
+  getAllocation,
   updateStock,
   consumeMeal,
   unconsumeMeal,
@@ -261,6 +262,143 @@ describe('Inventory Database Schema', () => {
 
       const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
       expect(row.stock).toBe(3);
+    });
+  });
+
+  describe('getAllocation', () => {
+    it('returns empty allocation when no meals planned', () => {
+      const result = getAllocation('2025-01-06', '2025-01-06');
+      expect(result.allocation).toEqual({});
+    });
+
+    it('marks fields as allocated when stock is sufficient', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+
+      expect(result.allocation['2025-01-06']).toBeDefined();
+      expect(result.allocation['2025-01-06'].baby_lunch_meat).toBe('allocated');
+    });
+
+    it('marks fields as unallocated when stock is insufficient', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+      // No stock inserted
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+
+      expect(result.allocation['2025-01-06'].baby_lunch_meat).toBe('unallocated');
+    });
+
+    it('allocates stock to earliest meals first', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' }); // Monday
+      updateTestDay(db, weekId, 1, { baby_lunch_meat: 'chicken' }); // Tuesday
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+
+      // Monday gets the one chicken
+      expect(result.allocation['2025-01-06'].baby_lunch_meat).toBe('allocated');
+      // Tuesday has no stock left
+      expect(result.allocation['2025-01-07'].baby_lunch_meat).toBe('unallocated');
+    });
+
+    it('marks consumed meals as consumed without decrementing stock', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
+      updateTestDay(db, weekId, 1, { baby_lunch_meat: 'chicken' });
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+      // Mark Monday's lunch as consumed
+      db.prepare('UPDATE days SET baby_lunch_consumed = 1 WHERE week_id = ? AND day = 0').run(weekId);
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+
+      // Monday is consumed — stock not decremented by allocation
+      expect(result.allocation['2025-01-06'].baby_lunch_meat).toBe('consumed');
+      // Tuesday gets the stock (since consumed didn't use it in allocation)
+      expect(result.allocation['2025-01-07'].baby_lunch_meat).toBe('allocated');
+    });
+
+    it('skips empty fields (no entry in allocation map)', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken', baby_lunch_vegetable: '' });
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+
+      expect(result.allocation['2025-01-06'].baby_lunch_meat).toBe('allocated');
+      // Empty vegetable field should not appear
+      expect(result.allocation['2025-01-06'].baby_lunch_vegetable).toBeUndefined();
+    });
+
+    it('handles multiple ingredients independently', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, {
+        baby_lunch_meat: 'chicken',
+        baby_lunch_vegetable: 'peas',
+        baby_lunch_fruit: 'apple',
+      });
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Peas', 0);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Apple', 2);
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+      const monday = result.allocation['2025-01-06'];
+
+      expect(monday.baby_lunch_meat).toBe('allocated');
+      expect(monday.baby_lunch_vegetable).toBe('unallocated');
+      expect(monday.baby_lunch_fruit).toBe('allocated');
+    });
+
+    it('crosses week boundaries', () => {
+      // Sunday of first week
+      const weekId1 = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId1, 6, { baby_lunch_meat: 'chicken' }); // Sunday Jan 12
+
+      // Monday of second week
+      const weekId2 = insertTestWeek(db, '2025-01-13');
+      updateTestDay(db, weekId2, 0, { baby_lunch_meat: 'chicken' }); // Monday Jan 13
+
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+
+      // Start from Saturday Jan 11 — covers Sun Jan 12 and Mon Jan 13
+      const result = getAllocation('2025-01-06', '2025-01-11');
+
+      // Sunday gets the stock first (chronologically earlier)
+      expect(result.allocation['2025-01-12'].baby_lunch_meat).toBe('allocated');
+      // Monday has no stock left
+      expect(result.allocation['2025-01-13'].baby_lunch_meat).toBe('unallocated');
+    });
+
+    it('normalizes ingredient names for stock matching', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' }); // lowercase in meal
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1); // capitalized in stock
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+      expect(result.allocation['2025-01-06'].baby_lunch_meat).toBe('allocated');
+    });
+
+    it('allocates across all three baby meals', () => {
+      const weekId = insertTestWeek(db, '2025-01-06');
+      updateTestDay(db, weekId, 0, {
+        baby_breakfast_cereal: 'oats',
+        baby_lunch_meat: 'chicken',
+        baby_dinner_vegetable: 'carrots',
+      });
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Oats', 1);
+      db.prepare('INSERT INTO inventory (ingredient, stock) VALUES (?, ?)').run('Chicken', 1);
+      // No carrots in stock
+
+      const result = getAllocation('2025-01-06', '2025-01-06');
+      const monday = result.allocation['2025-01-06'];
+
+      expect(monday.baby_breakfast_cereal).toBe('allocated');
+      expect(monday.baby_lunch_meat).toBe('allocated');
+      expect(monday.baby_dinner_vegetable).toBe('unallocated');
     });
   });
 });

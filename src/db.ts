@@ -18,7 +18,10 @@ import type {
   DayFieldKey,
   DateParts,
   InventoryItem,
-  InventoryResponse
+  InventoryResponse,
+  AllocationMap,
+  AllocationStatus,
+  AllocationResponse
 } from './types/index.js';
 
 const DB_PATH = config.paths.db(import.meta.dirname);
@@ -877,6 +880,105 @@ function unconsumeMeal(weekOf: string, dayIndex: number, mealType: string): DayR
 }
 
 /**
+ * Computes stock allocation for baby meal fields across a date range.
+ * Walks days chronologically from today, allocating stock to the earliest
+ * occurrences first. Consumed meals are marked as such and don't consume stock.
+ * Past days (before today) are excluded — indicators are forward-looking only.
+ *
+ * @param weekOf - The week being viewed (YYYY-MM-DD Monday), used to determine
+ *                 the full date range to cover
+ * @param todayOverride - Optional date string to use as today (for testing)
+ */
+function getAllocation(weekOf: string, todayOverride?: string): AllocationResponse {
+  const database = getDb();
+  const today = todayOverride ? new Date(todayOverride + 'T12:00:00') : getEasternNow();
+  const todayStr = (() => {
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  })();
+
+  // Determine date range: today through max(today+6, weekOf+6)
+  const weekOfEnd = new Date(weekOf + 'T12:00:00');
+  weekOfEnd.setDate(weekOfEnd.getDate() + 6);
+  const todayPlus6 = new Date(today);
+  todayPlus6.setDate(todayPlus6.getDate() + 6);
+  const endDate = weekOfEnd > todayPlus6 ? weekOfEnd : todayPlus6;
+
+  // Build list of dates from today to endDate
+  const dates: { dateStr: string; weekOf: string | null; dayIndex: number }[] = [];
+  const weekOfsNeeded = new Set<string>();
+  const cursor = new Date(today);
+  while (cursor <= endDate) {
+    const y = cursor.getFullYear();
+    const m = String(cursor.getMonth() + 1).padStart(2, '0');
+    const dd = String(cursor.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${dd}`;
+    const wOf = getMonday(`${dateStr}T12:00:00`);
+    if (wOf) weekOfsNeeded.add(wOf);
+    const dow = cursor.getDay();
+    const dayIndex = dow === 0 ? 6 : dow - 1;
+    dates.push({ dateStr, weekOf: wOf, dayIndex });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  // Batch fetch weeks
+  const weeksCache: Record<string, WeekWithDays | null> = {};
+  for (const wOf of weekOfsNeeded) {
+    weeksCache[wOf] = getWeek(wOf);
+  }
+
+  // Load current stock levels
+  const allStock = database.prepare('SELECT ingredient, stock FROM inventory').all() as { ingredient: string; stock: number }[];
+  const remainingStock = new Map<string, number>(allStock.map(r => [r.ingredient, r.stock]));
+
+  // Baby meal field keys (the 9 fields that map to ingredients)
+  const BABY_FIELD_KEYS = Object.values(BABY_MEAL_FIELDS).flatMap(m => m.fields);
+
+  const allocation: AllocationMap = {};
+
+  // Walk days chronologically
+  for (const { dateStr, weekOf: wOf, dayIndex } of dates) {
+    const week = wOf ? weeksCache[wOf] : null;
+    const dayData = week?.days.find(r => r.day === dayIndex);
+    if (!dayData) continue;
+
+    const dayAlloc: Record<string, AllocationStatus> = {};
+
+    for (const [mealType, mealConfig] of Object.entries(BABY_MEAL_FIELDS)) {
+      const consumedKey = `${mealType}_consumed` as keyof DayRecord;
+      const isConsumed = !!dayData[consumedKey];
+
+      for (const field of mealConfig.fields) {
+        const value = dayData[field as keyof DayRecord] as string;
+        if (!value || !value.trim()) continue;
+
+        if (isConsumed) {
+          dayAlloc[field] = 'consumed';
+          continue;
+        }
+
+        const normalized = normalizeIngredient(value);
+        const remaining = remainingStock.get(normalized) ?? 0;
+        if (remaining > 0) {
+          dayAlloc[field] = 'allocated';
+          remainingStock.set(normalized, remaining - 1);
+        } else {
+          dayAlloc[field] = 'unallocated';
+        }
+      }
+    }
+
+    if (Object.keys(dayAlloc).length > 0) {
+      allocation[dateStr] = dayAlloc;
+    }
+  }
+
+  return { allocation };
+}
+
+/**
  * Closes the database connection.
  * Called during graceful shutdown to ensure WAL checkpoint completes.
  */
@@ -938,6 +1040,7 @@ export {
   CATEGORY_SET,
   consumeMeal,
   unconsumeMeal,
+  getAllocation,
   closeDb,
   setTestDb,
   resetDb
