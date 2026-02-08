@@ -835,6 +835,7 @@ function toggleAddItemForm() {
     if (success) {
       addItemFormVisible = false;
       loadInventory();
+      refreshAllocationIndicators();
     }
   };
 
@@ -916,7 +917,7 @@ function createInventoryItem(item) {
     deleteBtn.title = 'Remove item';
     deleteBtn.addEventListener('click', async () => {
       const success = await deleteManualItemApi(item.ingredient);
-      if (success) loadInventory();
+      if (success) { loadInventory(); refreshAllocationIndicators(); }
     });
     row.appendChild(deleteBtn);
   }
@@ -930,7 +931,7 @@ function createInventoryItem(item) {
   minusBtn.textContent = '−';
   minusBtn.addEventListener('click', async () => {
     const success = await updateStockApi(item.ingredient, -1);
-    if (success) loadInventory();
+    if (success) { loadInventory(); refreshAllocationIndicators(); }
   });
 
   const stockCount = document.createElement('span');
@@ -942,7 +943,7 @@ function createInventoryItem(item) {
   plusBtn.textContent = '+';
   plusBtn.addEventListener('click', async () => {
     const success = await updateStockApi(item.ingredient, 1);
-    if (success) loadInventory();
+    if (success) { loadInventory(); refreshAllocationIndicators(); }
   });
 
   controls.appendChild(minusBtn);
