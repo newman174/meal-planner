@@ -1,13 +1,13 @@
 """
 Meal Planner display for Adafruit MagTag (ESP32-S2/S3, 2.9" e-ink).
 Fetches today's meals from /api/schedule/upcoming and renders them
-with a high-contrast e-ink layout. Deep sleeps for battery life.
+with a high-contrast e-ink layout. Headless deep-sleep design for
+maximum battery life — no polling loop, wakes on timer or button press.
 
 Required CircuitPython libraries in /lib/:
   - adafruit_requests.mpy
   - adafruit_connection_manager.mpy
   - adafruit_display_text/  (folder)
-  - neopixel.mpy
 
 Copy this file to CIRCUITPY/code.py and settings.toml to CIRCUITPY/settings.toml.
 """
@@ -21,14 +21,13 @@ import wifi
 import socketpool
 import digitalio
 import analogio
+import alarm
 import adafruit_requests
-# import neopixel
 from adafruit_display_text.label import Label
 
 # ── Config ──────────────────────────────────────────────────
 API_BASE = os.getenv("MEAL_PLANNER_URL")
 REFRESH_MINUTES = int(os.getenv("REFRESH_MINUTES", "30"))
-IDLE_TIMEOUT_SECONDS = int(os.getenv("IDLE_TIMEOUT_SECONDS", "120"))
 
 WIDTH = 296
 HEIGHT = 128
@@ -36,9 +35,17 @@ FONT = terminalio.FONT
 CHAR_W = 6
 HEADER_H = 28
 LOW_BATTERY_V = 3.5
-DEBOUNCE_S = 0.3
 
-# leds = neopixel.NeoPixel(board.NEOPIXEL, 4, brightness=0.03)
+# Button pins: A=D15, B=D14, C=D12, D=D11
+PIN_BTN_A = board.D15
+PIN_BTN_C = board.D12
+
+# ── Disable NeoPixel/sensor power rail ──────────────────────
+# The MagTag's NEOPIXEL_POWER pin gates power to the NeoPixels
+# and LIS3DH accelerometer. Default is HIGH (on), wasting ~3-5mA.
+_neopixel_power = digitalio.DigitalInOut(board.NEOPIXEL_POWER)
+_neopixel_power.direction = digitalio.Direction.OUTPUT
+_neopixel_power.value = False
 
 
 # ── Graphics primitives ─────────────────────────────────────
@@ -51,10 +58,8 @@ def word_wrap(text, n):
     """Split text into two lines, breaking at word boundary if possible."""
     if len(text) <= n:
         return text, ""
-    # Find last space within limit
     break_at = text.rfind(" ", 0, n + 1)
     if break_at <= 0:
-        # No space found, hard break
         break_at = n
     return text[:break_at].rstrip(), text[break_at:].lstrip()
 
@@ -105,23 +110,6 @@ def read_battery():
     return v
 
 
-def init_buttons():
-    pins = [board.D15, board.D14, board.D12, board.D11]
-    btns = []
-    for p in pins:
-        b = digitalio.DigitalInOut(p)
-        b.direction = digitalio.Direction.INPUT
-        b.pull = digitalio.Pull.UP
-        btns.append(b)
-    return btns
-
-
-# def flash(color, dur=0.15):
-    # leds.fill(color)
-    # time.sleep(dur)
-    # leds.fill((0, 0, 0))
-
-
 # ── Network ─────────────────────────────────────────────────
 def format_mac(mac_bytes):
     """Format MAC address bytes as colon-separated hex string."""
@@ -135,7 +123,7 @@ def get_mac():
 def connect():
     if wifi.radio.connected:
         return
-    # leds.fill((255, 0, 0))
+    wifi.radio.enabled = True
     print("Connecting to WiFi...")
     wifi.radio.connect(
         os.getenv("CIRCUITPY_WIFI_SSID"),
@@ -145,13 +133,11 @@ def connect():
 
 
 def fetch_today(session):
-    # leds.fill((0, 0, 255))
     url = f"{API_BASE}/api/schedule/upcoming"
     print(f"Fetching {url}")
     resp = session.get(url)
     data = resp.json()
     resp.close()
-    # leds.fill((0, 0, 0))
     return data["days"][0], data.get("updated_at", "")
 
 
@@ -213,7 +199,6 @@ def render_today(day, batt, updated_at=""):
         g.append(big_text(dinner, x=6, y=y))
         y += 20
     else:
-        # Wrap at word boundary
         line1, line2 = word_wrap(dinner, max_big)
         g.append(big_text(line1, x=6, y=y))
         y += 22
@@ -279,73 +264,51 @@ def render_error(msg, batt=None):
 
 
 # ── Deep sleep ──────────────────────────────────────────────
-# def deep_sleep():
-#     leds.fill((0, 0, 0))
-#     try:
-#         import alarm
-
-#         ta = alarm.time.TimeAlarm(
-#             monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
-#         )
-#         print(f"Deep sleeping for {REFRESH_MINUTES} minutes")
-#         alarm.exit_and_deep_sleep_until_alarms(ta)
-#     except ImportError:
-#         print("Deep sleep not supported, sleeping in place")
-#         time.sleep(REFRESH_MINUTES * 60)
-# def deep_sleep():
-#     # 1. Turn off the actual LEDs
-#     leds.fill((0, 0, 0))
-#     leds.show()
-    
-#     # 2. Physically cut power to the NeoPixel/Sensor power rail
-#     # This is the "secret sauce" for the MagTag
-#     import digitalio
-#     import board
-#     power_pin = digitalio.DigitalInOut(board.NEOPIXEL_POWER)
-#     power_pin.direction = digitalio.Direction.OUTPUT
-#     power_pin.value = False  # False cuts power on the MagTag
-    
-#     try:
-#         import alarm
-#         print("Entering True Deep Sleep...")
-#         ta = alarm.time.TimeAlarm(
-#             monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
-#         )
-#         alarm.exit_and_deep_sleep_until_alarms(ta)
-#     except ImportError:
-#         time.sleep(REFRESH_MINUTES * 60)
-
 def deep_sleep():
-    print("Preparing for deep sleep...")
-    
-    # 1. Properly shut down the NeoPixel object
-    # This usually releases the power gate pin automatically
-    # leds.fill((0, 0, 0))
-    # leds.show()
-    # leds.deinit() 
+    print(f"Deep sleeping for {REFRESH_MINUTES} minutes...")
 
-    # 2. Ensure the display is not busy
-    # If the e-ink is still 'chemically' switching, it pulls mA
+    # Wait for e-ink to finish — active refresh draws significant current
     while board.DISPLAY.busy:
         time.sleep(0.1)
 
-    try:
-        import alarm
-        ta = alarm.time.TimeAlarm(
-            monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
-        )
-        alarm.exit_and_deep_sleep_until_alarms(ta)
-    except ImportError:
-        time.sleep(REFRESH_MINUTES * 60)
+    # Disable WiFi radio before sleeping
+    wifi.radio.enabled = False
+
+    # Timer wake: refresh on schedule
+    ta = alarm.time.TimeAlarm(
+        monotonic_time=time.monotonic() + REFRESH_MINUTES * 60
+    )
+    # Button wake: A (manual refresh) and C (manual refresh)
+    ba = alarm.pin.PinAlarm(pin=PIN_BTN_A, value=False, pull=True)
+    bc = alarm.pin.PinAlarm(pin=PIN_BTN_C, value=False, pull=True)
+
+    alarm.exit_and_deep_sleep_until_alarms(ta, ba, bc)
+
 
 # ── Main ────────────────────────────────────────────────────
+# Detect what woke us — deep sleep resets the CPU, so code.py
+# runs from the top each time. alarm.wake_alarm tells us why.
+wake = alarm.wake_alarm
+if isinstance(wake, alarm.pin.PinAlarm):
+    print(f"Woke by button: {wake.pin}")
+elif isinstance(wake, alarm.time.TimeAlarm):
+    print("Woke by timer")
+else:
+    print("Fresh boot (power-on/reset)")
+
+# Only show loading screen on fresh boot (not timer/button wake)
 mac = get_mac()
 print(f"MAC: {mac}")
-render_loading(mac=mac)
+if wake is None:
+    render_loading(mac=mac)
+
 connect()
 ip = str(wifi.radio.ipv4_address)
 print(f"IP:  {ip}")
-render_loading(mac=mac, ip=ip)
+
+# Show loading with IP only on fresh boot
+if wake is None:
+    render_loading(mac=mac, ip=ip)
 
 pool = socketpool.SocketPool(wifi.radio)
 session = adafruit_requests.Session(pool)
@@ -353,55 +316,15 @@ session = adafruit_requests.Session(pool)
 batt = read_battery()
 print(f"Battery: {batt:.2f}V")
 
-today = None
-updated_at = ""
 try:
     today, updated_at = fetch_today(session)
-    # leds.fill((0, 0, 0))
 except Exception as e:
-    # leds.fill((255, 50, 0))
     print(f"Error: {e}")
     render_error(e, batt)
-    time.sleep(0.5)
     deep_sleep()
 
+# Render meals, disable WiFi, deep sleep immediately
 render_today(today, batt, updated_at)
-
-# ── Button loop (C=refresh, D=sleep) ───────────────────────
-buttons = init_buttons()
-last_press = time.monotonic()
-last_activity = time.monotonic()
-
-while True:
-    now = time.monotonic()
-
-    if now - last_activity >= IDLE_TIMEOUT_SECONDS:
-        print("Idle timeout, entering deep sleep")
-        deep_sleep()
-
-    pressed = None
-    for i, btn in enumerate(buttons):
-        if not btn.value:
-            if now - last_press >= DEBOUNCE_S:
-                pressed = i
-                last_press = now
-                last_activity = now
-            break
-
-    if pressed == 2:  # C — Refresh
-        print("Refreshing data")
-        # flash((0, 0, 255))
-        try:
-            today, updated_at = fetch_today(session)
-            batt = read_battery()
-            render_today(today, batt, updated_at)
-        except Exception as e:
-            print(f"Refresh error: {e}")
-            render_error(e, batt)
-
-    elif pressed == 3:  # D — Sleep
-        print("Entering deep sleep")
-        # flash((255, 0, 0))
-        deep_sleep()
-
-    time.sleep(0.1)
+wifi.radio.enabled = False
+print("WiFi disabled")
+deep_sleep()

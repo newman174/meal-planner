@@ -6,7 +6,5 @@ CIRCUITPY_WIFI_PASSWORD = "your_wifi_password"
 MEAL_PLANNER_URL = "http://192.168.1.100:3000"
 
 # How often to refresh (minutes). Display deep sleeps between refreshes.
+# Button A or C will also wake from sleep for an immediate refresh.
 REFRESH_MINUTES = "30"
-
-# Seconds of inactivity before entering deep sleep (default 120 = 2 minutes)
-IDLE_TIMEOUT_SECONDS = "120"
