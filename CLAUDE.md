@@ -110,6 +110,14 @@ npm run deploy     # Build and rsync to production server
 - Manual items are pinned (persist at stock=0) and can be deleted via × button
 - Pin toggle button on all items: click to pin (persist beyond lookahead) or unpin (revert to auto)
 
+## Background Tasks
+
+### Auto-Complete Past Meals
+- Every 5 minutes (and once on startup), the server checks for past baby meals that were never marked as consumed
+- Any past day (before today in Eastern time) with unconsumed baby meals that have non-empty ingredients is auto-completed
+- Uses the same `consumeMeal()` function as the UI — sets the consumed flag and decrements inventory stock atomically
+- Configured via `config.autoCompleteIntervalMs` (default: 5 minutes)
+
 ## MagTag Display
 
 The MagTag fetches from `/api/schedule/upcoming` and displays:

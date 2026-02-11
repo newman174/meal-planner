@@ -29,6 +29,9 @@ const config: AppConfig = {
   // Timezone configuration
   timezone: 'America/New_York',
 
+  // Background tasks
+  autoCompleteIntervalMs: 5 * 60 * 1000, // 5 minutes
+
   // Logging configuration
   logLevel: process.env.LOG_LEVEL || 'info',
   nodeEnv: process.env.NODE_ENV || 'development',

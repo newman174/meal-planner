@@ -561,8 +561,19 @@ if (isMainModule) {
     logger.info({ port: config.port }, 'Meal Planner server started');
   });
 
+  // Auto-complete past baby meals: run once on startup, then every 5 minutes
+  db.autoCompletePastMeals();
+  const autoCompleteInterval = setInterval(() => {
+    try {
+      db.autoCompletePastMeals();
+    } catch (err) {
+      logger.error({ err }, 'Auto-complete past meals failed');
+    }
+  }, config.autoCompleteIntervalMs);
+
   function shutdown(signal: string) {
     logger.info(`Received ${signal}, shutting down gracefully`);
+    clearInterval(autoCompleteInterval);
     server.close(() => {
       db.closeDb();
       process.exit(0);

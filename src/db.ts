@@ -880,6 +880,81 @@ function unconsumeMeal(weekOf: string, dayIndex: number, mealType: string): DayR
 }
 
 /**
+ * Auto-completes past baby meals that have ingredients but weren't marked consumed.
+ * Finds all days before today (Eastern time) with unconsumed baby meals that have
+ * non-empty ingredients, and calls consumeMeal() for each — handling both the
+ * consumed flag and stock decrement atomically.
+ *
+ * @param todayOverride - Optional date string (YYYY-MM-DD) for testing
+ * @returns Object with count of meals completed
+ */
+function autoCompletePastMeals(todayOverride?: string): { completed: number } {
+  const database = getDb();
+  const todayStr = todayOverride || (() => {
+    const p = getEasternDateParts();
+    return `${p.year}-${p.month}-${p.day}`;
+  })();
+
+  // Find all past days with at least one unconsumed baby meal that has ingredients
+  const rows = database.prepare(`
+    SELECT w.week_of, d.day,
+           d.baby_breakfast_consumed, d.baby_lunch_consumed, d.baby_dinner_consumed,
+           d.baby_breakfast_cereal, d.baby_breakfast_fruit, d.baby_breakfast_yogurt,
+           d.baby_lunch_meat, d.baby_lunch_vegetable, d.baby_lunch_fruit,
+           d.baby_dinner_meat, d.baby_dinner_vegetable, d.baby_dinner_fruit
+    FROM days d
+    JOIN weeks w ON d.week_id = w.id
+    WHERE DATE(w.week_of, '+' || d.day || ' days') < ?
+      AND (
+        (d.baby_breakfast_consumed = 0 AND (d.baby_breakfast_cereal != '' OR d.baby_breakfast_fruit != '' OR d.baby_breakfast_yogurt != ''))
+        OR (d.baby_lunch_consumed = 0 AND (d.baby_lunch_meat != '' OR d.baby_lunch_vegetable != '' OR d.baby_lunch_fruit != ''))
+        OR (d.baby_dinner_consumed = 0 AND (d.baby_dinner_meat != '' OR d.baby_dinner_vegetable != '' OR d.baby_dinner_fruit != ''))
+      )
+  `).all(todayStr) as (Pick<DayRecord,
+    'day' | 'baby_breakfast_consumed' | 'baby_lunch_consumed' | 'baby_dinner_consumed' |
+    'baby_breakfast_cereal' | 'baby_breakfast_fruit' | 'baby_breakfast_yogurt' |
+    'baby_lunch_meat' | 'baby_lunch_vegetable' | 'baby_lunch_fruit' |
+    'baby_dinner_meat' | 'baby_dinner_vegetable' | 'baby_dinner_fruit'
+  > & { week_of: string })[];
+
+  let completed = 0;
+
+  for (const row of rows) {
+    const mealChecks: { type: string; consumed: number; hasIngredients: boolean }[] = [
+      {
+        type: 'baby_breakfast',
+        consumed: row.baby_breakfast_consumed,
+        hasIngredients: !!(row.baby_breakfast_cereal || row.baby_breakfast_fruit || row.baby_breakfast_yogurt),
+      },
+      {
+        type: 'baby_lunch',
+        consumed: row.baby_lunch_consumed,
+        hasIngredients: !!(row.baby_lunch_meat || row.baby_lunch_vegetable || row.baby_lunch_fruit),
+      },
+      {
+        type: 'baby_dinner',
+        consumed: row.baby_dinner_consumed,
+        hasIngredients: !!(row.baby_dinner_meat || row.baby_dinner_vegetable || row.baby_dinner_fruit),
+      },
+    ];
+
+    for (const meal of mealChecks) {
+      if (!meal.consumed && meal.hasIngredients) {
+        consumeMeal(row.week_of, row.day, meal.type);
+        completed++;
+        logger.info({ weekOf: row.week_of, day: row.day, meal: meal.type }, 'Auto-completed past meal');
+      }
+    }
+  }
+
+  if (completed > 0) {
+    logger.info({ completed }, 'Auto-complete past meals finished');
+  }
+
+  return { completed };
+}
+
+/**
  * Computes stock allocation for baby meal fields across a date range.
  * Walks days chronologically from today, allocating stock to the earliest
  * occurrences first. Consumed meals are marked as such and don't consume stock.
@@ -1040,6 +1115,7 @@ export {
   CATEGORY_SET,
   consumeMeal,
   unconsumeMeal,
+  autoCompletePastMeals,
   getAllocation,
   closeDb,
   setTestDb,

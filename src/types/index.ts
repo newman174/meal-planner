@@ -191,6 +191,9 @@ export interface AppConfig {
   logLevel: string;
   nodeEnv: string;
 
+  // Background tasks
+  autoCompleteIntervalMs: number;
+
   // Paths
   paths: PathConfig;
 }
