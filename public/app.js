@@ -852,6 +852,43 @@ function toggleAddItemForm() {
   input.focus();
 }
 
+let inventoryReloadTimer = null;
+
+/**
+ * Schedules a full inventory reload after 2s of inactivity.
+ * Coalesces rapid +/- clicks into a single server sync.
+ */
+function scheduleInventoryReload() {
+  clearTimeout(inventoryReloadTimer);
+  inventoryReloadTimer = setTimeout(() => {
+    loadInventory();
+    refreshAllocationIndicators();
+  }, 2000);
+}
+
+/**
+ * Optimistically updates a single inventory row in-place after a stock change,
+ * without triggering a full re-render or filter re-apply.
+ */
+function updateStockLocally(row, item, delta) {
+  item.stock = Math.max(0, item.stock + delta);
+  item.toMake = Math.max(0, item.needed - item.stock);
+
+  // Update displayed text
+  row.querySelector('.stock-count').textContent = item.stock;
+  const toMakeEl = row.querySelector('.to-make-count');
+  toMakeEl.textContent = item.toMake > 0 ? `make ${item.toMake}` : 'ready';
+  toMakeEl.classList.toggle('zero', item.toMake === 0);
+
+  // Update data attributes (used by applyInventoryFilter)
+  row.dataset.stock = item.stock;
+  row.dataset.toMake = item.toMake;
+
+  // Update CSS classes for styling
+  row.classList.toggle('needs-prep', item.toMake > 0);
+  row.classList.toggle('stocked', item.toMake === 0 && item.stock >= item.needed && item.needed > 0);
+}
+
 /**
  * Creates an inventory item row element.
  */
@@ -931,7 +968,10 @@ function createInventoryItem(item) {
   minusBtn.textContent = '−';
   minusBtn.addEventListener('click', async () => {
     const success = await updateStockApi(item.ingredient, -1);
-    if (success) { loadInventory(); refreshAllocationIndicators(); }
+    if (success) {
+      updateStockLocally(row, item, -1);
+      scheduleInventoryReload();
+    }
   });
 
   const stockCount = document.createElement('span');
@@ -943,7 +983,10 @@ function createInventoryItem(item) {
   plusBtn.textContent = '+';
   plusBtn.addEventListener('click', async () => {
     const success = await updateStockApi(item.ingredient, 1);
-    if (success) { loadInventory(); refreshAllocationIndicators(); }
+    if (success) {
+      updateStockLocally(row, item, 1);
+      scheduleInventoryReload();
+    }
   });
 
   controls.appendChild(minusBtn);
