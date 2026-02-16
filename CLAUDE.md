@@ -7,6 +7,10 @@ A weekly meal planning app for tracking baby and adult meals, with a web interfa
 - **Backend**: Node.js + Express + TypeScript
 - **Database**: SQLite via better-sqlite3 (WAL mode)
 - **Frontend**: Vanilla JavaScript, HTML, CSS (no framework)
+- **Testing**: Vitest + Supertest (API) + jsdom (frontend)
+- **Security**: Helmet (headers) + express-rate-limit
+- **Logging**: Pino (structured) + pino-roll (rotation, optional)
+- **Deployment**: PM2 (process manager) + rsync to production
 - **Hardware**: Adafruit MagTag e-ink display (CircuitPython)
 
 ## Project Structure
@@ -20,6 +24,11 @@ meal-planner/
 │   ├── db.ts               # Database layer (SQLite)
 │   ├── logger.ts           # Structured logging module
 │   └── config.ts           # Centralized configuration
+├── tests/                  # Test suite (Vitest)
+│   ├── helpers/            # Shared test utilities
+│   ├── integration/        # API + DB integration tests
+│   ├── unit/               # Pure logic unit tests
+│   └── frontend/           # jsdom-based frontend tests
 ├── scripts/                # Utility scripts
 │   └── seed.ts             # Database seeder
 ├── dist/                   # Compiled JavaScript (gitignored)
@@ -33,6 +42,8 @@ meal-planner/
 │   └── settings.toml       # WiFi/server config
 ├── logs/                   # Log files (production)
 ├── meals.db                # SQLite database file
+├── vitest.config.ts        # Test configuration
+├── ecosystem.config.cjs    # PM2 process manager config
 ├── tsconfig.json           # TypeScript configuration
 └── package.json
 ```
@@ -40,15 +51,23 @@ meal-planner/
 ## Commands
 
 ```bash
-npm run build      # Compile TypeScript to dist/
-npm start          # Start compiled server (default port 3000)
-npm run start:dev  # Start dev server with hot reload (tsx)
-npm run seed       # Seed database with sample data
-npm run typecheck  # Run TypeScript type checker
-npm run deploy     # Build and rsync to production server
+npm run build          # Compile TypeScript to dist/
+npm start              # Start compiled server (default port 3000)
+npm run start:dev      # Start dev server with hot reload (tsx)
+npm run seed           # Seed database with sample data
+npm run typecheck      # Run TypeScript type checker
+npm test               # Run tests (vitest)
+npm run test:watch     # Run tests in watch mode
+npm run test:coverage  # Run tests with coverage report
+npm run pm2:start      # Start with PM2 process manager
+npm run pm2:logs       # View logs with pino-pretty formatting
+npm run deploy         # Build and rsync to production server
 ```
 
 ## API Endpoints
+
+### Utility API
+- `GET /api/version` - Returns `{ version }` from package.json
 
 ### App API (used by frontend)
 - `GET /api/weeks/:weekOf` - Get week data (creates if not exists)
@@ -58,10 +77,12 @@ npm run deploy     # Build and rsync to production server
 - `GET /api/weeks` - List all saved weeks
 - `POST /api/weeks/:weekOf/copy` - Copy week to new date
 - `DELETE /api/weeks/:weekOf` - Delete a week
+- `GET /api/lookahead?days=N` - Raw day records for upcoming N days (3, 5, or 7) with weekOf/dayIndex metadata for inline editing
 
 ### Inventory API
 - `GET /api/inventory?lookahead=N&today=YYYY-MM-DD` - Get inventory status (N: 3, 5, or 7 days)
-- `PUT /api/inventory/:ingredient` - Update stock level (body: `{stock: N}`, `{delta: N}`, or `{pinned: bool, category?: string}`)
+- `GET /api/inventory/allocation?weekOf=YYYY-MM-DD` - Per-day, per-field allocation map showing stock coverage per meal ingredient
+- `PUT /api/inventory/:ingredient` - Update inventory item (body: `{stock: N}`, `{delta: N}`, `{pinned: bool, category?: string}`, or `{noPrep: bool|null}`)
 - `POST /api/inventory` - Add manual inventory item (body: `{ingredient, category}`)
 - `DELETE /api/inventory/:ingredient` - Delete a manual (pinned) inventory item
 
@@ -89,6 +110,7 @@ npm run deploy     # Build and rsync to production server
 - `stock` (INTEGER, current quantity on hand, **floored at 0** — never negative)
 - `category` (TEXT, one of: meat/vegetable/fruit/cereal/yogurt)
 - `pinned` (INTEGER, 0/1 — 1 = manually added, persists at stock=0)
+- `no_prep` (INTEGER, tri-state: NULL = use category default, 1 = no prep needed, 0 = prep needed; cereal/yogurt default to no-prep)
 
 ## Frontend Notes
 
@@ -109,6 +131,9 @@ npm run deploy     # Build and rsync to production server
 - "+ Add Item" button for manually adding ingredients with a category
 - Manual items are pinned (persist at stock=0) and can be deleted via × button
 - Pin toggle button on all items: click to pin (persist beyond lookahead) or unpin (revert to auto)
+- No-prep attribute: items can be marked as "just serve" (no cooking needed); cereal/yogurt default to no-prep
+- No-prep items shown in a collapsible section, separated from items that need advance preparation
+- Allocation indicators on schedule view: per-meal-field dots showing whether each ingredient is covered by stock (allocated/unallocated/consumed)
 
 ## Background Tasks
 
