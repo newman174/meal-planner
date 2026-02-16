@@ -5,6 +5,7 @@
  */
 
 import pino, { Logger } from 'pino';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
@@ -120,7 +121,7 @@ logger.createChild = function(this: Logger, bindings: pino.Bindings): Logger {
  */
 logger.requestMiddleware = function(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
-  const requestId = Math.random().toString(36).substring(2, 10);
+  const requestId = randomUUID().slice(0, 8);
 
   // Add request ID to request for tracing
   req.requestId = requestId;

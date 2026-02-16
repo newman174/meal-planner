@@ -183,10 +183,10 @@ describe('Inventory Database Schema', () => {
       expect(row.stock).toBe(5);
     });
 
-    it('applies delta to non-existent ingredient (starts from 0)', () => {
+    it('applies delta to non-existent ingredient (starts from 0, floors at 0)', () => {
       updateStock('peas', { delta: -1 });
       const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Peas') as { stock: number };
-      expect(row.stock).toBe(-1);
+      expect(row.stock).toBe(0);
     });
 
     it('normalizes ingredient name', () => {
@@ -214,14 +214,14 @@ describe('Inventory Database Schema', () => {
       expect(chicken.stock).toBe(2);
     });
 
-    it('consumeMeal creates inventory rows if they do not exist', () => {
+    it('consumeMeal creates inventory rows if they do not exist (floors at 0)', () => {
       const weekId = insertTestWeek(db, '2025-01-06');
       updateTestDay(db, weekId, 0, { baby_lunch_meat: 'chicken' });
 
       consumeMeal('2025-01-06', 0, 'baby_lunch');
 
       const row = db.prepare('SELECT stock FROM inventory WHERE ingredient = ?').get('Chicken') as { stock: number };
-      expect(row.stock).toBe(-1);
+      expect(row.stock).toBe(0);
     });
 
     it('consumeMeal is idempotent (does not double-decrement)', () => {

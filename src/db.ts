@@ -195,6 +195,15 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 const DAYS_PER_WEEK = 7;
 
 /**
+ * Converts a JS Date.getDay() value (0=Sunday, 6=Saturday) to a
+ * Monday-based index (0=Monday, 6=Sunday) used throughout the app.
+ */
+function toDayIndex(date: Date): number {
+  const dow = date.getDay();
+  return dow === 0 ? 6 : dow - 1;
+}
+
+/**
  * Whitelist mapping of user input field names to database column names.
  * This prevents SQL injection by ensuring only valid, pre-defined column
  * names are used in dynamic queries.
@@ -254,8 +263,8 @@ function getEasternDateParts(date: Date = new Date()): DateParts {
  * Gets the current date/time adjusted to Eastern timezone.
  */
 function getEasternNow(): Date {
-  const str = new Date().toLocaleString('en-US', { timeZone: config.timezone });
-  return new Date(str);
+  const parts = getEasternDateParts();
+  return new Date(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute);
 }
 
 /**
@@ -454,9 +463,7 @@ function getUpcomingDays(count: number): UpcomingDay[] {
     d.setDate(d.getDate() + i);
     const weekOf = getMonday(d);
     if (weekOf) weekOfsNeeded.add(weekOf);
-    const dow = d.getDay();
-    // Convert Sunday (0) to index 6, otherwise subtract 1 to get 0-based index from Monday
-    const dayIndex = dow === 0 ? 6 : dow - 1;
+    const dayIndex = toDayIndex(d);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
@@ -536,8 +543,7 @@ function getLookaheadDays(count: number): LookaheadDay[] {
     d.setDate(d.getDate() + i);
     const weekOf = getMonday(d);
     if (weekOf) weekOfsNeeded.add(weekOf);
-    const dow = d.getDay();
-    const dayIndex = dow === 0 ? 6 : dow - 1;
+    const dayIndex = toDayIndex(d);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
@@ -643,8 +649,7 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
     const d = new Date(today);
     d.setDate(d.getDate() + i);
     const weekOf = getMonday(formatDateStr(d));
-    const dow = d.getDay();
-    const dayIndex = dow === 0 ? 6 : dow - 1;
+    const dayIndex = toDayIndex(d);
 
     const week = weekOf ? weeksCache[weekOf] : null;
     const dayData = week?.days.find(r => r.day === dayIndex);
@@ -748,7 +753,7 @@ function updateStock(ingredient: string, update: { stock?: number; delta?: numbe
     ).run(normalized, update.stock);
   } else if (update.delta !== undefined) {
     database.prepare(
-      'INSERT INTO inventory (ingredient, stock) VALUES (?, ?) ON CONFLICT(ingredient) DO UPDATE SET stock = stock + ?'
+      'INSERT INTO inventory (ingredient, stock) VALUES (?, MAX(0, ?)) ON CONFLICT(ingredient) DO UPDATE SET stock = MAX(0, stock + ?)'
     ).run(normalized, update.delta, update.delta);
   }
 }
@@ -828,7 +833,7 @@ function consumeMeal(weekOf: string, dayIndex: number, mealType: string): DayRec
       if (!value || !value.trim()) continue;
       const normalized = normalizeIngredient(value);
       database.prepare(
-        'INSERT INTO inventory (ingredient, stock) VALUES (?, -1) ON CONFLICT(ingredient) DO UPDATE SET stock = stock - 1'
+        'INSERT INTO inventory (ingredient, stock) VALUES (?, 0) ON CONFLICT(ingredient) DO UPDATE SET stock = MAX(0, stock - 1)'
       ).run(normalized);
     }
   });
@@ -992,8 +997,7 @@ function getAllocation(weekOf: string, todayOverride?: string): AllocationRespon
     const dateStr = `${y}-${m}-${dd}`;
     const wOf = getMonday(`${dateStr}T12:00:00`);
     if (wOf) weekOfsNeeded.add(wOf);
-    const dow = cursor.getDay();
-    const dayIndex = dow === 0 ? 6 : dow - 1;
+    const dayIndex = toDayIndex(cursor);
     dates.push({ dateStr, weekOf: wOf, dayIndex });
     cursor.setDate(cursor.getDate() + 1);
   }

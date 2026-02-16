@@ -118,11 +118,19 @@ let lookaheadDayCount = parseInt(localStorage.getItem(LOOKAHEAD_DAYS_KEY), 10) |
  */
 function getMonday(date) {
   const d = new Date(date);
-  const day = d.getDay();
-  // Convert Sunday (0) to -6, otherwise 1-day to get Monday
-  const diff = day === 0 ? -6 : 1 - day;
+  const diff = d.getDay() === 0 ? -6 : 1 - d.getDay();
   d.setDate(d.getDate() + diff);
   return formatDate(d);
+}
+
+/**
+ * Converts a JS Date.getDay() value (0=Sunday) to a Monday-based index (0=Monday, 6=Sunday).
+ * @param {Date} date - Date object
+ * @returns {number} Day index (0-6, Monday-based)
+ */
+function toDayIndex(date) {
+  const dow = date.getDay();
+  return dow === 0 ? 6 : dow - 1;
 }
 
 /**
@@ -173,8 +181,7 @@ function getTodayDayIndex() {
   const today = new Date();
   const todayMonday = getMonday(today);
   if (todayMonday !== currentWeekOf) return -1;
-  const day = today.getDay();
-  return day === 0 ? 6 : day - 1;
+  return toDayIndex(today);
 }
 
 /**
@@ -913,7 +920,7 @@ function createInventoryItem(item) {
   const hasValidCategory = CATEGORY_ORDER.includes(item.category);
   const pinBtn = document.createElement('button');
   pinBtn.className = 'pin-toggle-btn' + (item.pinned ? ' pinned' : '');
-  pinBtn.innerHTML = '&#128204;';
+  pinBtn.textContent = '\u{1F4CC}';
   pinBtn.title = item.pinned ? 'Unpin item' : 'Pin item';
   pinBtn.addEventListener('click', async () => {
     if (item.pinned) {

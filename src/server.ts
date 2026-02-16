@@ -106,6 +106,11 @@ app.get('/api/version', (_req: Request, res: Response) => {
   res.json({ version: APP_VERSION });
 });
 
+// --- Constants used by route handlers ---
+
+const VALID_LOOKAHEADS = [3, 5, 7];
+const VALID_MEAL_TYPES = ['baby_breakfast', 'baby_lunch', 'baby_dinner'];
+
 // --- Look-ahead endpoint ---
 
 /**
@@ -250,9 +255,6 @@ app.delete('/api/weeks/:weekOf', (req: Request<{ weekOf: string }>, res: Respons
 
 // --- Inventory API routes ---
 
-const VALID_LOOKAHEADS = [3, 5, 7];
-const VALID_MEAL_TYPES = ['baby_breakfast', 'baby_lunch', 'baby_dinner'];
-
 /**
  * GET /api/inventory/allocation
  * Returns per-day, per-field allocation map showing whether each baby meal
@@ -265,7 +267,7 @@ app.get('/api/inventory/allocation', (req: Request, res: Response) => {
       res.status(400).json({ error: 'weekOf query parameter required in YYYY-MM-DD format.' });
       return;
     }
-    const todayOverride = req.query.today as string | undefined;
+    const todayOverride = config.nodeEnv !== 'production' ? req.query.today as string | undefined : undefined;
     const result = db.getAllocation(weekOf, todayOverride);
     res.json(result);
   } catch (err) {
@@ -286,7 +288,7 @@ app.get('/api/inventory', (req: Request, res: Response) => {
       return;
     }
 
-    const todayOverride = req.query.today as string | undefined;
+    const todayOverride = config.nodeEnv !== 'production' ? req.query.today as string | undefined : undefined;
     const result = db.getInventory(lookaheadParam, todayOverride);
     res.json(result);
   } catch (err) {
@@ -321,8 +323,14 @@ app.put('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res
       return;
     }
 
-    const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
-    const ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
+    let ingredient: string;
+    try {
+      const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+      ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
+    } catch {
+      res.status(400).json({ error: 'Invalid ingredient name encoding.' });
+      return;
+    }
 
     if (pinned === true) {
       if (!category || typeof category !== 'string' || !db.CATEGORY_SET.has(category)) {
@@ -389,8 +397,14 @@ app.post('/api/inventory', (req: Request, res: Response) => {
  */
 app.delete('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res: Response) => {
   try {
-    const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
-    const ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
+    let ingredient: string;
+    try {
+      const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
+      ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
+    } catch {
+      res.status(400).json({ error: 'Invalid ingredient name encoding.' });
+      return;
+    }
     const deleted = db.deleteManualItem(ingredient);
     if (!deleted) {
       res.status(404).json({ error: 'Item not found or not a manual item.' });
@@ -574,6 +588,8 @@ if (isMainModule) {
   function shutdown(signal: string) {
     logger.info(`Received ${signal}, shutting down gracefully`);
     clearInterval(autoCompleteInterval);
+    // Force exit if graceful shutdown stalls (e.g., hung connections)
+    setTimeout(() => process.exit(1), 5000).unref();
     server.close(() => {
       db.closeDb();
       process.exit(0);

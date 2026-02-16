@@ -86,7 +86,7 @@ npm run deploy     # Build and rsync to production server
 
 **inventory** table:
 - `ingredient` (TEXT, UNIQUE, normalized lowercase)
-- `stock` (INTEGER, current quantity on hand)
+- `stock` (INTEGER, current quantity on hand, **floored at 0** — never negative)
 - `category` (TEXT, one of: meat/vegetable/fruit/cereal/yogurt)
 - `pinned` (INTEGER, 0/1 — 1 = manually added, persists at stock=0)
 
