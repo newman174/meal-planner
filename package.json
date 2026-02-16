@@ -1,6 +1,6 @@
 {
   "name": "meal-planner",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Simple weekly meal planner for baby and adult meals",
   "type": "module",
   "main": "dist/server.js",
