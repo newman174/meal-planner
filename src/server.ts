@@ -310,9 +310,9 @@ app.put('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res
       return;
     }
 
-    const { stock, delta, pinned, category } = req.body as { stock?: number; delta?: number; pinned?: boolean; category?: string };
-    if (stock === undefined && delta === undefined && pinned === undefined) {
-      res.status(400).json({ error: 'Provide "stock", "delta", or "pinned".' });
+    const { stock, delta, pinned, category, noPrep } = req.body as { stock?: number; delta?: number; pinned?: boolean; category?: string; noPrep?: boolean | null };
+    if (stock === undefined && delta === undefined && pinned === undefined && noPrep === undefined) {
+      res.status(400).json({ error: 'Provide "stock", "delta", "pinned", or "noPrep".' });
       return;
     }
 
@@ -344,13 +344,21 @@ app.put('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res
       db.unpinItem(ingredient);
     }
 
+    if (noPrep !== undefined) {
+      if (noPrep !== null && typeof noPrep !== 'boolean') {
+        res.status(400).json({ error: '"noPrep" must be a boolean or null.' });
+        return;
+      }
+      db.setNoPrep(ingredient, noPrep);
+    }
+
     if (stock !== undefined || delta !== undefined) {
       db.updateStock(ingredient, { stock, delta });
     }
 
     const database = db.getDb();
-    const row = database.prepare('SELECT ingredient, stock, category, pinned FROM inventory WHERE ingredient = ?').get(ingredient) as { ingredient: string; stock: number; category: string; pinned: number } | undefined;
-    res.json(row || { ingredient, stock: 0, category: '', pinned: 0 });
+    const row = database.prepare('SELECT ingredient, stock, category, pinned, no_prep FROM inventory WHERE ingredient = ?').get(ingredient) as { ingredient: string; stock: number; category: string; pinned: number; no_prep: number | null } | undefined;
+    res.json(row || { ingredient, stock: 0, category: '', pinned: 0, no_prep: null });
   } catch (err) {
     logger.error({ err, ingredient: req.params.ingredient }, 'Error updating inventory');
     res.status(500).json({ error: 'Internal server error' });

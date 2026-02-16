@@ -123,6 +123,7 @@ export interface InventoryItem {
   needed: number;
   toMake: number;
   pinned?: boolean;
+  noPrep: boolean;  // true = just-serve (no cooking), false = needs advance prep
 }
 
 /** Response from GET /api/inventory */

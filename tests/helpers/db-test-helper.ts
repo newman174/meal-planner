@@ -48,7 +48,8 @@ export function createTestDb(): Database.Database {
       ingredient TEXT UNIQUE NOT NULL,
       stock INTEGER DEFAULT 0,
       category TEXT DEFAULT '',
-      pinned INTEGER DEFAULT 0
+      pinned INTEGER DEFAULT 0,
+      no_prep INTEGER DEFAULT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_days_week_id ON days(week_id);

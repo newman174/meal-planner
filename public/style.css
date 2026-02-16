@@ -1121,6 +1121,100 @@ html {
   transform: none;
 }
 
+/* ── No-Prep Toggle ── */
+.no-prep-toggle-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-placeholder);
+  box-shadow: none;
+  flex-shrink: 0;
+  border: 1px solid var(--border-input);
+  opacity: 0.5;
+  transition: all 0.2s ease;
+}
+
+.no-prep-toggle-btn:hover {
+  opacity: 1;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-color: var(--text-tertiary);
+  box-shadow: none;
+  transform: none;
+}
+
+.no-prep-toggle-btn.no-prep {
+  opacity: 1;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--save-color);
+  border-color: var(--save-color);
+}
+
+.no-prep-toggle-btn.no-prep:hover {
+  background: rgba(16, 185, 129, 0.25);
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── No-Prep Collapsible Section ── */
+.no-prep-section {
+  border-top: 2px dashed var(--border-divider);
+  margin-top: 24px;
+  padding-top: 16px;
+}
+
+.no-prep-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.no-prep-collapse-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  padding: 0;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.no-prep-collapse-btn:hover {
+  background: var(--list-hover);
+  box-shadow: none;
+  transform: none;
+  color: var(--text-primary);
+}
+
+.no-prep-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.no-prep-content.collapsed {
+  display: none;
+}
+
+.no-prep-category .inventory-item {
+  opacity: 0.85;
+}
+
 /* ── Allocation Indicators ── */
 .meal-fields input.alloc-ok {
   border-left: 3px solid var(--save-color);

@@ -147,7 +147,8 @@ function initSchema(): void {
     CREATE TABLE IF NOT EXISTS inventory (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ingredient TEXT UNIQUE NOT NULL,
-      stock INTEGER DEFAULT 0
+      stock INTEGER DEFAULT 0,
+      no_prep INTEGER DEFAULT NULL
     );
   `);
 
@@ -159,6 +160,13 @@ function initSchema(): void {
       ALTER TABLE inventory ADD COLUMN pinned INTEGER DEFAULT 0;
     `);
     logger.info('Added category and pinned columns to inventory table');
+  }
+
+  // Migrate: add no_prep column to inventory table
+  const invCols2 = (db.pragma('table_info(inventory)') as ColumnInfo[]).map(c => c.name);
+  if (!invCols2.includes('no_prep')) {
+    db.exec('ALTER TABLE inventory ADD COLUMN no_prep INTEGER DEFAULT NULL');
+    logger.info('Added no_prep column to inventory table');
   }
 
   // Migrate: capitalize first letter of ingredient names (merge duplicates)
@@ -682,8 +690,8 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
     }
   }
 
-  const allStock = database.prepare('SELECT ingredient, stock, category, pinned FROM inventory').all() as { ingredient: string; stock: number; category: string; pinned: number }[];
-  const stockMap = new Map(allStock.map(r => [r.ingredient, { stock: r.stock, category: r.category, pinned: r.pinned }]));
+  const allStock = database.prepare('SELECT ingredient, stock, category, pinned, no_prep FROM inventory').all() as { ingredient: string; stock: number; category: string; pinned: number; no_prep: number | null }[];
+  const stockMap = new Map(allStock.map(r => [r.ingredient, { stock: r.stock, category: r.category, pinned: r.pinned, no_prep: r.no_prep }]));
 
   const items: InventoryItem[] = [];
   const usedIngredients = new Set<string>();
@@ -692,6 +700,7 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
     const inv = stockMap.get(ingredient);
     const stock = inv?.stock || 0;
     const pinned = inv?.pinned === 1;
+    const effectiveCategory = inv?.category || data.category;
     usedIngredients.add(ingredient);
     items.push({
       ingredient,
@@ -701,6 +710,7 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
       needed: data.needed,
       toMake: Math.max(0, data.needed - stock),
       pinned,
+      noPrep: resolveNoPrep(inv?.no_prep ?? null, effectiveCategory),
     });
   }
 
@@ -716,6 +726,7 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
         needed: 0,
         toMake: 0,
         pinned: row.pinned === 1,
+        noPrep: resolveNoPrep(row.no_prep, row.category),
       });
     }
   }
@@ -731,6 +742,7 @@ function getInventory(lookahead: number, todayOverride?: string): InventoryRespo
         needed: 0,
         toMake: 0,
         pinned: row.pinned === 1,
+        noPrep: resolveNoPrep(row.no_prep, row.category),
       });
     }
   }
@@ -760,6 +772,20 @@ function updateStock(ingredient: string, update: { stock?: number; delta?: numbe
 
 /** Valid categories for manual inventory items */
 const CATEGORY_SET = new Set(['meat', 'vegetable', 'fruit', 'cereal', 'yogurt']);
+
+/** Categories that default to no-prep (just serve, no cooking needed) */
+const NO_PREP_CATEGORIES = new Set(['cereal', 'yogurt']);
+
+/**
+ * Resolves the effective noPrep value for an inventory item.
+ * NULL in the database means "use category default".
+ * Explicit 0 or 1 means the user overrode the default.
+ */
+function resolveNoPrep(noPrep: number | null, category: string): boolean {
+  if (noPrep === 1) return true;
+  if (noPrep === 0) return false;
+  return NO_PREP_CATEGORIES.has(category);  // NULL → category default
+}
 
 /**
  * Adds a manually pinned inventory item.
@@ -802,6 +828,22 @@ function unpinItem(ingredient: string): boolean {
   const normalized = normalizeIngredient(ingredient);
   const result = database.prepare('UPDATE inventory SET pinned = 0 WHERE ingredient = ? AND pinned = 1').run(normalized);
   return result.changes > 0;
+}
+
+/**
+ * Sets the no_prep override for an inventory item.
+ * @param ingredient - The ingredient name (will be normalized)
+ * @param noPrep - true (no prep needed), false (prep needed), or null (reset to category default)
+ */
+function setNoPrep(ingredient: string, noPrep: boolean | null): void {
+  const database = getDb();
+  const normalized = normalizeIngredient(ingredient);
+  const dbValue = noPrep === null ? null : noPrep ? 1 : 0;
+  database.prepare(
+    `INSERT INTO inventory (ingredient, stock, no_prep)
+     VALUES (?, 0, ?)
+     ON CONFLICT(ingredient) DO UPDATE SET no_prep = excluded.no_prep`
+  ).run(normalized, dbValue);
 }
 
 /**
@@ -1114,7 +1156,9 @@ export {
   addManualItem,
   deleteManualItem,
   unpinItem,
+  setNoPrep,
   CATEGORY_SET,
+  NO_PREP_CATEGORIES,
   consumeMeal,
   unconsumeMeal,
   autoCompletePastMeals,

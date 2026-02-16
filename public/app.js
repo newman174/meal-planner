@@ -98,6 +98,8 @@ const LOOKAHEAD_DAYS_KEY = 'lookaheadDays';
 const INVENTORY_OPEN_KEY = 'inventoryOpen';
 
 const INVENTORY_FILTER_KEY = 'inventoryFilter';
+const NO_PREP_COLLAPSED_KEY = 'noPrepCollapsed';
+const NO_PREP_CATEGORIES = new Set(['cereal', 'yogurt']);
 
 /** Currently active page: 'meals' or 'lookahead' */
 let currentPage = localStorage.getItem(PAGE_KEY) || 'meals';
@@ -779,6 +781,27 @@ async function togglePinApi(ingredient, pinned, category) {
 }
 
 /**
+ * Toggles the noPrep state of an inventory item via PUT /api/inventory/:ingredient.
+ * @param {string} ingredient - The ingredient name
+ * @param {boolean|null} noPrep - true (no-prep), false (prep), or null (reset to category default)
+ */
+async function toggleNoPrepApi(ingredient, noPrep) {
+  try {
+    const res = await fetch(`/api/inventory/${encodeURIComponent(ingredient)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noPrep }),
+    });
+    if (!res.ok) throw new Error(`Failed to toggle no-prep: ${res.status}`);
+    return true;
+  } catch (err) {
+    console.error('Error toggling no-prep:', err);
+    showError('Failed to toggle no-prep. Please try again.');
+    return false;
+  }
+}
+
+/**
  * Deletes a manual inventory item via DELETE /api/inventory/:ingredient.
  */
 async function deleteManualItemApi(ingredient) {
@@ -953,6 +976,26 @@ function createInventoryItem(item) {
   });
   row.appendChild(pinBtn);
 
+  // No-prep toggle button
+  const noPrepBtn = document.createElement('button');
+  noPrepBtn.className = 'no-prep-toggle-btn' + (item.noPrep ? ' no-prep' : '');
+  noPrepBtn.textContent = item.noPrep ? '\u{1F37D}\u{FE0F}' : '\u{1F52A}';
+  noPrepBtn.title = item.noPrep ? 'Mark as needs prep' : 'Mark as no-prep (just serve)';
+  noPrepBtn.addEventListener('click', async () => {
+    const isDefault = NO_PREP_CATEGORIES.has(item.category) === item.noPrep;
+    let newValue;
+    if (isDefault) {
+      // Currently matches category default → set explicit opposite
+      newValue = !item.noPrep;
+    } else {
+      // Already overridden → reset to null (category default)
+      newValue = null;
+    }
+    const success = await toggleNoPrepApi(item.ingredient, newValue);
+    if (success) loadInventory();
+  });
+  row.appendChild(noPrepBtn);
+
   // Delete button for pinned items
   if (item.pinned) {
     const deleteBtn = document.createElement('button');
@@ -1096,8 +1139,12 @@ function renderInventory(data) {
 
   view.appendChild(header);
 
-  // Empty state
-  if (data.items.length === 0 && data.otherStock.length === 0) {
+  // Split items into prep and no-prep
+  const prepItems = data.items.filter(item => !item.noPrep);
+  const noPrepItems = data.items.filter(item => item.noPrep);
+
+  // Empty state — only if nothing at all
+  if (prepItems.length === 0 && noPrepItems.length === 0 && data.otherStock.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'inventory-empty';
     empty.textContent = `No baby meals planned for the next ${data.lookahead} days. Use "+ Add Item" to track ingredients manually.`;
@@ -1106,15 +1153,15 @@ function renderInventory(data) {
     return;
   }
 
-  // Group items by category
+  // Group prep items by category
   const grouped = {};
-  for (const item of data.items) {
+  for (const item of prepItems) {
     const cat = item.category || '';
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(item);
   }
 
-  // Render categories in order
+  // Render prep categories in order
   for (const cat of CATEGORY_ORDER) {
     if (!grouped[cat] || grouped[cat].length === 0) continue;
 
@@ -1130,6 +1177,69 @@ function renderInventory(data) {
     }
 
     view.appendChild(section);
+  }
+
+  // No-prep section
+  if (noPrepItems.length > 0) {
+    const noPrepSection = document.createElement('div');
+    noPrepSection.className = 'no-prep-section';
+
+    const noPrepHeader = document.createElement('div');
+    noPrepHeader.className = 'no-prep-header';
+
+    const isCollapsed = localStorage.getItem(NO_PREP_COLLAPSED_KEY) === '1';
+
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'no-prep-collapse-btn';
+    collapseBtn.textContent = isCollapsed ? '\u25B6' : '\u25BC';
+    collapseBtn.title = isCollapsed ? 'Expand' : 'Collapse';
+
+    const noPrepTitle = document.createElement('span');
+    noPrepTitle.className = 'no-prep-title';
+    noPrepTitle.textContent = `No Prep / Just Serve (${noPrepItems.length})`;
+
+    noPrepHeader.appendChild(collapseBtn);
+    noPrepHeader.appendChild(noPrepTitle);
+    noPrepSection.appendChild(noPrepHeader);
+
+    const noPrepContent = document.createElement('div');
+    noPrepContent.className = 'no-prep-content' + (isCollapsed ? ' collapsed' : '');
+
+    collapseBtn.addEventListener('click', () => {
+      const nowCollapsed = !noPrepContent.classList.contains('collapsed');
+      noPrepContent.classList.toggle('collapsed');
+      collapseBtn.textContent = nowCollapsed ? '\u25B6' : '\u25BC';
+      collapseBtn.title = nowCollapsed ? 'Expand' : 'Collapse';
+      localStorage.setItem(NO_PREP_COLLAPSED_KEY, nowCollapsed ? '1' : '0');
+    });
+
+    // Group no-prep items by category
+    const noPrepGrouped = {};
+    for (const item of noPrepItems) {
+      const cat = item.category || '';
+      if (!noPrepGrouped[cat]) noPrepGrouped[cat] = [];
+      noPrepGrouped[cat].push(item);
+    }
+
+    for (const cat of CATEGORY_ORDER) {
+      if (!noPrepGrouped[cat] || noPrepGrouped[cat].length === 0) continue;
+
+      const catSection = document.createElement('div');
+      catSection.className = 'inventory-category no-prep-category';
+
+      const catTitle = document.createElement('h3');
+      catTitle.textContent = CATEGORY_LABELS[cat] || cat;
+      catSection.appendChild(catTitle);
+
+      for (const item of noPrepGrouped[cat]) {
+        catSection.appendChild(createInventoryItem(item));
+      }
+
+      noPrepContent.appendChild(catSection);
+    }
+
+    noPrepSection.appendChild(noPrepContent);
+    view.appendChild(noPrepSection);
   }
 
   // Other stock section
@@ -1158,14 +1268,23 @@ function applyInventoryFilter() {
   const panel = document.getElementById('inventory-panel');
   if (!panel) return;
 
+  // "Needs Prep" filter hides the entire no-prep section
+  const noPrepSection = panel.querySelector('.no-prep-section');
+  if (noPrepSection) {
+    noPrepSection.style.display = inventoryFilter === 'needs-prep' ? 'none' : '';
+  }
+
   const items = panel.querySelectorAll('.inventory-item');
   items.forEach(item => {
     const stock = parseInt(item.dataset.stock) || 0;
     const needed = parseInt(item.dataset.needed) || 0;
     const toMake = parseInt(item.dataset.toMake) || 0;
+
+    // For items inside the no-prep section, "needs-prep" filter is handled at section level
+    const inNoPrepSection = item.closest('.no-prep-section');
     let visible = true;
     switch (inventoryFilter) {
-      case 'needs-prep': visible = toMake > 0; break;
+      case 'needs-prep': visible = inNoPrepSection ? true : toMake > 0; break;
       case 'in-stock': visible = stock > 0; break;
       case 'unallocated': visible = stock > needed; break;
     }
@@ -1193,6 +1312,15 @@ function applyInventoryFilter() {
     }
     label.style.display = hasVisible ? '' : 'none';
   });
+
+  // Hide no-prep section if all categories inside it are hidden (after filter)
+  if (noPrepSection && noPrepSection.style.display !== 'none') {
+    const noPrepContent = noPrepSection.querySelector('.no-prep-content');
+    if (noPrepContent) {
+      const visibleCats = noPrepContent.querySelectorAll('.inventory-category:not([style*="display: none"])');
+      noPrepSection.style.display = visibleCats.length > 0 ? '' : 'none';
+    }
+  }
 }
 
 /**
