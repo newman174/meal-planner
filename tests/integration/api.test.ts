@@ -49,14 +49,11 @@ describe('API Endpoints', () => {
       expect(res.body.error).toContain('Invalid date format');
     });
 
-    it('accepts dates that JavaScript rolls over (known JS Date behavior)', async () => {
-      // JavaScript Date is lenient: 2025-02-30 becomes 2025-03-02
-      // The API accepts this as valid since it's parseable
+    it('rejects dates that JavaScript would silently roll over', async () => {
       const res = await client.get('/api/weeks/2025-02-30');
 
-      expect(res.status).toBe(200);
-      // The week is created for the rolled-over date
-      expect(res.body.week_of).toBeDefined();
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid date format');
     });
   });
 

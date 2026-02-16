@@ -77,9 +77,11 @@ function isValidWeekOf(weekOf: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekOf)) {
     return false;
   }
-  // Also validate it's an actual date
+  // Validate it's an actual calendar date (reject JS Date rollover like Feb 30 → Mar 2)
+  const [year, month, day] = weekOf.split('-').map(Number);
   const parsed = new Date(weekOf + 'T00:00:00');
-  return !isNaN(parsed.getTime());
+  if (isNaN(parsed.getTime())) return false;
+  return parsed.getFullYear() === year && parsed.getMonth() + 1 === month && parsed.getDate() === day;
 }
 
 /**

@@ -840,8 +840,7 @@ function consumeMeal(weekOf: string, dayIndex: number, mealType: string): DayRec
 
   consumeTransaction();
 
-  const updatedWeek = getWeek(weekOf);
-  return updatedWeek?.days.find(d => d.day === dayIndex) || null;
+  return { ...day, [consumedKey]: 1 } as DayRecord;
 }
 
 /**
@@ -880,8 +879,7 @@ function unconsumeMeal(weekOf: string, dayIndex: number, mealType: string): DayR
 
   unconsumeTransaction();
 
-  const updatedWeek = getWeek(weekOf);
-  return updatedWeek?.days.find(d => d.day === dayIndex) || null;
+  return { ...day, [consumedKey]: 0 } as DayRecord;
 }
 
 /**

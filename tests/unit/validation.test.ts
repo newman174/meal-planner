@@ -37,11 +37,10 @@ describe('isValidWeekOf', () => {
     expect(isValidWeekOf('2025-00-15')).toBe(false); // Month 0 doesn't exist
   });
 
-  it('allows dates that JavaScript rolls over (known JS Date behavior)', () => {
-    // JavaScript's Date constructor is lenient and rolls over invalid dates
-    // e.g., 2025-02-30 becomes 2025-03-02, which is technically parseable
-    // This is expected behavior - the validation only checks format and parseability
-    expect(isValidWeekOf('2025-02-30')).toBe(true); // JS rolls to March 2
+  it('returns false for dates that JavaScript would silently roll over', () => {
+    expect(isValidWeekOf('2025-02-30')).toBe(false); // Feb 30 doesn't exist
+    expect(isValidWeekOf('2025-04-31')).toBe(false); // Apr only has 30 days
+    expect(isValidWeekOf('2025-02-29')).toBe(false); // 2025 is not a leap year
   });
 
   it('returns false for empty string', () => {
