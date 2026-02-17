@@ -32,6 +32,13 @@ const config: AppConfig = {
   // Background tasks
   autoCompleteIntervalMs: 5 * 60 * 1000, // 5 minutes
 
+  // Backup configuration
+  backupIntervalMs: 24 * 60 * 60 * 1000, // 24 hours
+  backupRetainDaily: 7,
+  backupRetainWeekly: 4,
+  backupRetainMonthly: 3,
+  backupManualCooldownMs: 5 * 60 * 1000, // 5 minutes
+
   // Logging configuration
   logLevel: process.env.LOG_LEVEL || 'info',
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -41,6 +48,7 @@ const config: AppConfig = {
     db: (dirname: string): string => path.join(dirname, '../meals.db'),
     logs: (dirname: string): string => process.env.LOG_DIR || path.join(dirname, '../logs'),
     public: (dirname: string): string => path.join(dirname, '../public'),
+    backups: (dirname: string): string => process.env.BACKUP_DIR || path.join(dirname, '../backups'),
   }
 };
 

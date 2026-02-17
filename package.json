@@ -18,7 +18,7 @@
     "pm2:logs": "pm2 logs --raw | pino-pretty",
     "preversion": "npm run typecheck && npm test",
     "postversion": "git push && git push --tags",
-    "deploy": "npm run build && rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' --exclude src --exclude logs --exclude .claude ./ root@192.168.50.193:~/meal-planner/"
+    "deploy": "npm run build && rsync -avz --delete --exclude node_modules --exclude .git --exclude '*.db*' --exclude src --exclude logs --exclude backups --exclude .claude ./ root@192.168.50.193:~/meal-planner/"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",

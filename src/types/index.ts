@@ -167,6 +167,7 @@ export interface PathConfig {
   db: (dirname: string) => string;
   logs: (dirname: string) => string;
   public: (dirname: string) => string;
+  backups: (dirname: string) => string;
 }
 
 /** Application configuration */
@@ -195,6 +196,13 @@ export interface AppConfig {
   // Background tasks
   autoCompleteIntervalMs: number;
 
+  // Backup
+  backupIntervalMs: number;
+  backupRetainDaily: number;
+  backupRetainWeekly: number;
+  backupRetainMonthly: number;
+  backupManualCooldownMs: number;
+
   // Paths
   paths: PathConfig;
 }
@@ -209,6 +217,31 @@ export interface DateParts {
   hour: string;
   minute: string;
   [key: string]: string;
+}
+
+// ============ Backup Types ============
+
+/** Metadata for a single backup file */
+export interface BackupFileInfo {
+  filename: string;
+  path: string;
+  createdAt: string; // ISO 8601
+  sizeBytes: number;
+}
+
+/** Response from GET /api/backups */
+export interface BackupsListResponse {
+  backups: BackupFileInfo[];
+  count: number;
+}
+
+/** Response from POST /api/backup */
+export interface BackupCreateResponse {
+  filename: string;
+  path: string;
+  sizeBytes: number;
+  retained: number;
+  pruned: number;
 }
 
 // ============ Express Extensions ============

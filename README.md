@@ -11,6 +11,7 @@ A weekly meal planning app for tracking baby and adult meals, with inventory man
 - **Allocation indicators** showing whether each meal ingredient is covered by stock
 - **Look-ahead view** spanning across weeks for planning upcoming days
 - **Auto-complete** past meals to keep inventory counts accurate
+- **Automated database backups** with GFS-lite retention (daily/weekly/monthly)
 - **Dark mode** toggle
 - **Copy week** to quickly duplicate a meal plan
 - **MagTag e-ink display** integration for kitchen display
@@ -73,6 +74,7 @@ meal-planner/
 │   │   └── index.ts        # Shared type definitions
 │   ├── server.ts           # Express server entry point
 │   ├── db.ts               # Database layer (SQLite)
+│   ├── backup.ts           # Database backup with GFS-lite retention
 │   ├── logger.ts           # Structured logging module
 │   └── config.ts           # Centralized configuration
 ├── tests/                  # Test suite (Vitest)
@@ -91,6 +93,7 @@ meal-planner/
 ├── magtag/                 # MagTag e-ink display code
 │   ├── code.py             # CircuitPython code for MagTag
 │   └── settings.toml       # WiFi/server config
+├── backups/                # Database backups (gitignored)
 ├── logs/                   # Log files (production)
 ├── meals.db                # SQLite database file
 ├── vitest.config.ts        # Test configuration
@@ -121,10 +124,24 @@ meal-planner/
 - `POST /api/inventory` - Add manual inventory item
 - `DELETE /api/inventory/:ingredient` - Delete a manual inventory item
 
+### Backup
+- `GET /api/backups` - List all backups with metadata
+- `POST /api/backup` - Trigger manual backup (5-min cooldown, returns 429 if too soon)
+
 ### Public (for Home Assistant/MagTag)
 - `GET /api/schedule/current` - Current week's meals
 - `GET /api/schedule/upcoming` - Today + next 2 days
 - `GET /api/schedule/:weekOf` - Specific week formatted for display
+
+## Database Backups
+
+Automated daily backups using SQLite's online backup API (safe during concurrent reads/writes).
+
+- **Schedule**: Once on startup (if none exists for today) + every 24 hours
+- **Retention**: GFS-lite policy — last 7 daily, 4 weekly, 3 monthly (~14 files max)
+- **Manual trigger**: `POST /api/backup` with 5-minute cooldown
+- **Storage**: `backups/` directory (configurable via `BACKUP_DIR` env var)
+- **Filename format**: `meals-YYYY-MM-DDTHH-MM-SSZ.db`
 
 ## MagTag Display
 

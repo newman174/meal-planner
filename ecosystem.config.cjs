@@ -16,6 +16,7 @@ module.exports = {
       'magtag',
       'docs',
       'coverage',
+      'backups',
       '.git',
       '.claude',
       '*.md',

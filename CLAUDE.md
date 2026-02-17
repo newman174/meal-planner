@@ -22,6 +22,7 @@ meal-planner/
 │   │   └── index.ts        # Shared type definitions
 │   ├── server.ts           # Express server entry point
 │   ├── db.ts               # Database layer (SQLite)
+│   ├── backup.ts           # Database backup with GFS-lite retention
 │   ├── logger.ts           # Structured logging module
 │   └── config.ts           # Centralized configuration
 ├── tests/                  # Test suite (Vitest)
@@ -40,6 +41,7 @@ meal-planner/
 ├── magtag/                 # MagTag e-ink display code
 │   ├── code.py             # CircuitPython code for MagTag
 │   └── settings.toml       # WiFi/server config
+├── backups/                # Database backups (gitignored)
 ├── logs/                   # Log files (production)
 ├── meals.db                # SQLite database file
 ├── vitest.config.ts        # Test configuration
@@ -85,6 +87,10 @@ npm run deploy         # Build and rsync to production server
 - `PUT /api/inventory/:ingredient` - Update inventory item (body: `{stock: N}`, `{delta: N}`, `{pinned: bool, category?: string}`, or `{noPrep: bool|null}`)
 - `POST /api/inventory` - Add manual inventory item (body: `{ingredient, category}`)
 - `DELETE /api/inventory/:ingredient` - Delete a manual (pinned) inventory item
+
+### Backup API
+- `GET /api/backups` - List all backups with metadata (filename, createdAt, sizeBytes)
+- `POST /api/backup` - Trigger manual backup (201 on success, 429 if within 5-min cooldown)
 
 ### Public API (for Home Assistant/MagTag)
 - `GET /api/schedule/current` - Current week's meals
@@ -142,6 +148,15 @@ npm run deploy         # Build and rsync to production server
 - Any past day (before today in Eastern time) with unconsumed baby meals that have non-empty ingredients is auto-completed
 - Uses the same `consumeMeal()` function as the UI — sets the consumed flag and decrements inventory stock atomically
 - Configured via `config.autoCompleteIntervalMs` (default: 5 minutes)
+
+## Database Backups
+
+- Uses better-sqlite3's `.backup()` API — safe during concurrent reads/writes
+- Backup files stored in `backups/` directory (configurable via `BACKUP_DIR` env var)
+- Filename format: `meals-YYYY-MM-DDTHH-MM-SSZ.db` (UTC timestamps)
+- **GFS-lite retention**: keeps last 7 daily, 4 weekly, 3 monthly backups (~14 files max)
+- Automatic daily backup via `setInterval` (24h), plus startup backup if none exists for today
+- Manual trigger via `POST /api/backup` with 5-minute cooldown (returns 429 with `Retry-After`)
 
 ## MagTag Display
 

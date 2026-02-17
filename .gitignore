@@ -15,6 +15,9 @@ meals.md
 *.log
 logs/
 
+# Backups
+backups/
+
 # Test coverage
 coverage/
 features.md

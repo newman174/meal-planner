@@ -12,6 +12,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import config from './config.js';
 import * as db from './db.js';
+import * as backup from './backup.js';
 import logger from './logger.js';
 import './types/index.js'; // Import for Express Request extension
 
@@ -518,6 +519,43 @@ app.put('/api/weeks/:weekOf/days/:day/unconsume', (req: Request<{ weekOf: string
   }
 });
 
+// --- Backup API routes ---
+
+/**
+ * GET /api/backups
+ * Lists all database backup files with metadata.
+ */
+app.get('/api/backups', (_req: Request, res: Response) => {
+  try {
+    const result = backup.listBackups();
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, 'Error listing backups');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/backup
+ * Triggers a manual database backup with a 5-minute cooldown.
+ * Returns 429 if called again within the cooldown window.
+ */
+app.post('/api/backup', async (_req: Request, res: Response) => {
+  try {
+    const result = await backup.triggerManualBackup();
+    res.status(201).json(result);
+  } catch (err) {
+    const typed = err as Error & { retryAfterSec?: number };
+    if (typed.retryAfterSec) {
+      res.set('Retry-After', String(typed.retryAfterSec));
+      res.status(429).json({ error: 'Backup cooldown active', retryAfterSec: typed.retryAfterSec });
+      return;
+    }
+    logger.error({ err }, 'Error creating backup');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // --- Public API routes (for Home Assistant, MagTag, etc.) ---
 // These routes are intentionally unauthenticated for easy integration
 
@@ -608,9 +646,16 @@ if (isMainModule) {
     }
   }, config.autoCompleteIntervalMs);
 
+  // Database backups: run on startup if needed, then every 24 hours
+  backup.runStartupBackupIfNeeded().catch(err => logger.error({ err }, 'Startup backup failed'));
+  const backupInterval = setInterval(() => {
+    backup.createBackup().catch(err => logger.error({ err }, 'Scheduled backup failed'));
+  }, config.backupIntervalMs);
+
   function shutdown(signal: string) {
     logger.info(`Received ${signal}, shutting down gracefully`);
     clearInterval(autoCompleteInterval);
+    clearInterval(backupInterval);
     // Force exit if graceful shutdown stalls (e.g., hung connections)
     setTimeout(() => process.exit(1), 5000).unref();
     server.close(() => {
