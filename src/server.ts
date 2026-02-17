@@ -342,8 +342,7 @@ app.put('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, res
 
     let ingredient: string;
     try {
-      const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
-      ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
+      ingredient = db.normalizeIngredient(decodeURIComponent(req.params.ingredient));
     } catch {
       res.status(400).json({ error: 'Invalid ingredient name encoding.' });
       return;
@@ -424,8 +423,7 @@ app.delete('/api/inventory/:ingredient', (req: Request<{ ingredient: string }>, 
   try {
     let ingredient: string;
     try {
-      const raw = decodeURIComponent(req.params.ingredient).trim().toLowerCase();
-      ingredient = raw.charAt(0).toUpperCase() + raw.slice(1);
+      ingredient = db.normalizeIngredient(decodeURIComponent(req.params.ingredient));
     } catch {
       res.status(400).json({ error: 'Invalid ingredient name encoding.' });
       return;

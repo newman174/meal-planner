@@ -106,7 +106,7 @@ npm run deploy         # Build and rsync to production server
 - `note` - Day-level note field
 
 **inventory** table:
-- `ingredient` (TEXT, UNIQUE, normalized lowercase)
+- `ingredient` (TEXT, UNIQUE, title-cased with uppercase abbreviations preserved)
 - `stock` (INTEGER, current quantity on hand, **floored at 0** — never negative)
 - `category` (TEXT, one of: meat/vegetable/fruit/cereal/yogurt)
 - `pinned` (INTEGER, 0/1 — 1 = manually added, persists at stock=0)

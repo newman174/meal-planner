@@ -194,6 +194,38 @@ function initSchema(): void {
     capitalize();
     logger.info({ count: lowercaseRows.length }, 'Capitalized inventory ingredient names');
   }
+
+  // Migrate: title-case multi-word ingredient names (e.g. "Sweet potato" → "Sweet Potato")
+  const multiWordRows = db.prepare(
+    "SELECT id, ingredient, stock, category, pinned, no_prep FROM inventory WHERE ingredient LIKE '% %'"
+  ).all() as { id: number; ingredient: string; stock: number; category: string; pinned: number; no_prep: number | null }[];
+  if (multiWordRows.length > 0) {
+    const findExisting = db.prepare('SELECT id, stock, pinned FROM inventory WHERE ingredient = ?');
+    const mergeDelete = db.prepare('DELETE FROM inventory WHERE id = ?');
+    const mergeUpdate = db.prepare('UPDATE inventory SET stock = ?, pinned = MAX(pinned, ?) WHERE id = ?');
+    const renameUpdate = db.prepare('UPDATE inventory SET ingredient = ? WHERE id = ?');
+    const titleCase = db.transaction(() => {
+      let migrated = 0;
+      for (const row of multiWordRows) {
+        const normalized = normalizeIngredient(row.ingredient);
+        if (normalized === row.ingredient) continue; // already correct
+        const existing = findExisting.get(normalized) as { id: number; stock: number; pinned: number } | undefined;
+        if (existing && existing.id !== row.id) {
+          // Merge: sum stock, keep highest pinned, delete the old row
+          mergeUpdate.run(existing.stock + row.stock, row.pinned, existing.id);
+          mergeDelete.run(row.id);
+        } else {
+          renameUpdate.run(normalized, row.id);
+        }
+        migrated++;
+      }
+      return migrated;
+    });
+    const count = titleCase();
+    if (count > 0) {
+      logger.info({ count }, 'Title-cased multi-word inventory ingredient names');
+    }
+  }
 }
 
 /** Day names indexed by day number (0 = Monday, 6 = Sunday) */
@@ -613,11 +645,15 @@ function formatWeekForApi(weekData: WeekWithDays | null): FormattedWeek | null {
 
 /**
  * Normalizes an ingredient name for storage and comparison.
- * Trims whitespace and lowercases the name.
+ * Title-cases each word, but preserves all-uppercase abbreviations (e.g. "PB", "GF").
  */
 function normalizeIngredient(name: string): string {
-  const lower = name.trim().toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
+  return name.trim().split(/\s+/).map(word => {
+    if (word.length > 1 && word === word.toUpperCase()) {
+      return word;
+    }
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
 }
 
 /**
@@ -1216,6 +1252,7 @@ export {
   setNoPrep,
   CATEGORY_SET,
   NO_PREP_CATEGORIES,
+  normalizeIngredient,
   consumeMeal,
   unconsumeMeal,
   autoCompletePastMeals,
