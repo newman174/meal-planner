@@ -1098,6 +1098,63 @@ function getAllocation(weekOf: string, todayOverride?: string): AllocationRespon
 }
 
 /**
+ * Returns distinct baby meal ingredient values from history, grouped by category.
+ * Includes pinned inventory items merged into their respective categories.
+ * Used by the autocomplete feature on schedule input fields.
+ */
+function getSuggestions(): Record<string, string[]> {
+  const database = getDb();
+
+  // Unpivot all 9 baby meal columns, each tagged with its category
+  const rows = database.prepare(`
+    SELECT 'cereal' AS category, baby_breakfast_cereal AS value FROM days WHERE baby_breakfast_cereal != ''
+    UNION
+    SELECT 'yogurt', baby_breakfast_yogurt FROM days WHERE baby_breakfast_yogurt != ''
+    UNION
+    SELECT 'fruit', baby_breakfast_fruit FROM days WHERE baby_breakfast_fruit != ''
+    UNION
+    SELECT 'meat', baby_lunch_meat FROM days WHERE baby_lunch_meat != ''
+    UNION
+    SELECT 'vegetable', baby_lunch_vegetable FROM days WHERE baby_lunch_vegetable != ''
+    UNION
+    SELECT 'fruit', baby_lunch_fruit FROM days WHERE baby_lunch_fruit != ''
+    UNION
+    SELECT 'meat', baby_dinner_meat FROM days WHERE baby_dinner_meat != ''
+    UNION
+    SELECT 'vegetable', baby_dinner_vegetable FROM days WHERE baby_dinner_vegetable != ''
+    UNION
+    SELECT 'fruit', baby_dinner_fruit FROM days WHERE baby_dinner_fruit != ''
+  `).all() as { category: string; value: string }[];
+
+  // Also include pinned inventory items with a valid category
+  const pinnedRows = database.prepare(
+    "SELECT category, ingredient AS value FROM inventory WHERE pinned = 1 AND category IN ('cereal', 'yogurt', 'fruit', 'meat', 'vegetable')"
+  ).all() as { category: string; value: string }[];
+
+  const result: Record<string, Set<string>> = {
+    cereal: new Set(),
+    yogurt: new Set(),
+    fruit: new Set(),
+    meat: new Set(),
+    vegetable: new Set(),
+  };
+
+  for (const row of [...rows, ...pinnedRows]) {
+    const normalized = normalizeIngredient(row.value);
+    if (normalized && result[row.category]) {
+      result[row.category].add(normalized);
+    }
+  }
+
+  // Convert Sets to sorted arrays
+  const suggestions: Record<string, string[]> = {};
+  for (const [category, valueSet] of Object.entries(result)) {
+    suggestions[category] = [...valueSet].sort();
+  }
+  return suggestions;
+}
+
+/**
  * Closes the database connection.
  * Called during graceful shutdown to ensure WAL checkpoint completes.
  */
@@ -1163,6 +1220,7 @@ export {
   unconsumeMeal,
   autoCompletePastMeals,
   getAllocation,
+  getSuggestions,
   closeDb,
   setTestDb,
   resetDb

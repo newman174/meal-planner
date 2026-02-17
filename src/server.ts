@@ -108,6 +108,21 @@ app.get('/api/version', (_req: Request, res: Response) => {
   res.json({ version: APP_VERSION });
 });
 
+/**
+ * GET /api/suggestions
+ * Returns distinct baby meal ingredient values grouped by category.
+ * Used by the autocomplete feature on schedule input fields.
+ */
+app.get('/api/suggestions', (_req: Request, res: Response) => {
+  try {
+    const suggestions = db.getSuggestions();
+    res.json(suggestions);
+  } catch (err) {
+    logger.error({ err }, 'Error fetching suggestions');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // --- Constants used by route handlers ---
 
 const VALID_LOOKAHEADS = [3, 5, 7];

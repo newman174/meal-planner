@@ -325,6 +325,10 @@ button:active {
   box-shadow: var(--shadow-card-hover);
 }
 
+.day-card:focus-within {
+  z-index: 5;
+}
+
 .day-card h2 {
   font-size: 1rem;
   color: var(--text-primary);
@@ -1213,6 +1217,38 @@ html {
 
 .no-prep-category .inventory-item {
   opacity: 0.85;
+}
+
+/* ── Autocomplete ── */
+.autocomplete-wrapper {
+  position: relative;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.autocomplete-option {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.autocomplete-option:hover,
+.autocomplete-option.highlighted {
+  background: var(--list-hover);
 }
 
 /* ── Allocation Indicators ── */

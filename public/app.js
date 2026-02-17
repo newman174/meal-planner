@@ -86,6 +86,190 @@ const FIELDS = {
   ],
 };
 
+// ── Autocomplete suggestions ──
+
+/** Cached suggestions from /api/suggestions, keyed by category */
+let suggestionsCache = null;
+
+/**
+ * Fetches autocomplete suggestions from the API.
+ * @param {boolean} force - If true, bypasses cache
+ */
+async function fetchSuggestions(force = false) {
+  if (suggestionsCache && !force) return;
+  try {
+    const res = await fetch('/api/suggestions');
+    if (!res.ok) return;
+    suggestionsCache = await res.json();
+  } catch {
+    // Non-critical — silently ignore
+  }
+}
+
+/**
+ * Extracts the ingredient category from a baby meal field key.
+ * @param {string} fieldKey - e.g., 'baby_lunch_fruit'
+ * @returns {string|null} Category name or null for non-baby fields
+ */
+function getCategoryFromFieldKey(fieldKey) {
+  if (!fieldKey.startsWith('baby_')) return null;
+  const parts = fieldKey.split('_');
+  return parts[parts.length - 1]; // e.g., 'fruit', 'meat', 'cereal'
+}
+
+/** Currently active autocomplete dropdown (only one at a time) */
+let activeAutocomplete = null;
+
+/**
+ * Attaches autocomplete behavior to a baby meal input field.
+ * Wraps the input in a positioned container and creates a dropdown.
+ * @param {HTMLInputElement} input - The input element
+ * @param {string} category - The ingredient category (fruit, meat, etc.)
+ */
+function attachAutocomplete(input, category) {
+  // Create wrapper that takes the input's grid position
+  const wrapper = document.createElement('div');
+  wrapper.className = 'autocomplete-wrapper';
+  wrapper.appendChild(input);
+
+  // Create dropdown
+  const dropdown = document.createElement('div');
+  dropdown.className = 'autocomplete-dropdown';
+  dropdown.setAttribute('role', 'listbox');
+  dropdown.style.display = 'none';
+  wrapper.appendChild(dropdown);
+
+  // ARIA attributes
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-expanded', 'false');
+  input.setAttribute('aria-autocomplete', 'list');
+
+  let highlightedIndex = -1;
+
+  function getFilteredSuggestions() {
+    if (!suggestionsCache || !suggestionsCache[category]) return [];
+    const query = input.value.toLowerCase();
+    const items = suggestionsCache[category];
+    if (!query) return items.slice(0, 20);
+    return items.filter(s => s.toLowerCase().includes(query)).slice(0, 20);
+  }
+
+  function renderDropdown(items) {
+    while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+    highlightedIndex = -1;
+    input.removeAttribute('aria-activedescendant');
+
+    if (items.length === 0) {
+      dropdown.style.display = 'none';
+      input.setAttribute('aria-expanded', 'false');
+      return;
+    }
+
+    items.forEach((text, i) => {
+      const option = document.createElement('div');
+      option.className = 'autocomplete-option';
+      option.setAttribute('role', 'option');
+      option.id = `${input.id}-opt-${i}`;
+      option.textContent = text;
+      // mousedown + preventDefault so blur doesn't close dropdown before click fires
+      option.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        selectItem(text);
+      });
+      dropdown.appendChild(option);
+    });
+
+    dropdown.style.display = '';
+    input.setAttribute('aria-expanded', 'true');
+
+    // Close any other active dropdown
+    if (activeAutocomplete && activeAutocomplete !== dropdown) {
+      activeAutocomplete.style.display = 'none';
+      const prevInput = activeAutocomplete.previousElementSibling;
+      if (prevInput) prevInput.setAttribute('aria-expanded', 'false');
+    }
+    activeAutocomplete = dropdown;
+  }
+
+  function selectItem(text) {
+    input.value = text;
+    closeDropdown();
+    // Trigger the existing debouncedSave chain
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function closeDropdown() {
+    dropdown.style.display = 'none';
+    input.setAttribute('aria-expanded', 'false');
+    highlightedIndex = -1;
+    input.removeAttribute('aria-activedescendant');
+    if (activeAutocomplete === dropdown) activeAutocomplete = null;
+  }
+
+  function updateHighlight(items) {
+    const options = dropdown.querySelectorAll('.autocomplete-option');
+    options.forEach((opt, i) => {
+      opt.classList.toggle('highlighted', i === highlightedIndex);
+    });
+    if (highlightedIndex >= 0 && highlightedIndex < items.length) {
+      const activeId = `${input.id}-opt-${highlightedIndex}`;
+      input.setAttribute('aria-activedescendant', activeId);
+      // Scroll highlighted option into view
+      options[highlightedIndex]?.scrollIntoView?.({ block: 'nearest' });
+    } else {
+      input.removeAttribute('aria-activedescendant');
+    }
+  }
+
+  // Show suggestions on focus
+  input.addEventListener('focus', () => {
+    const items = getFilteredSuggestions();
+    renderDropdown(items);
+  });
+
+  // Filter on typing (runs alongside existing input handler from debouncedSave)
+  input.addEventListener('input', () => {
+    const items = getFilteredSuggestions();
+    renderDropdown(items);
+  });
+
+  // Keyboard navigation
+  input.addEventListener('keydown', (e) => {
+    if (dropdown.style.display === 'none') return;
+
+    const items = getFilteredSuggestions();
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightedIndex = (highlightedIndex + 1) % items.length;
+      updateHighlight(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightedIndex = highlightedIndex <= 0 ? items.length - 1 : highlightedIndex - 1;
+      updateHighlight(items);
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      selectItem(items[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      closeDropdown();
+    }
+  });
+
+  // Close on blur (after any mousedown handlers fire)
+  input.addEventListener('blur', () => {
+    closeDropdown();
+  });
+
+  // Close on Tab
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') closeDropdown();
+  });
+
+  // Store wrapper reference on input for integration
+  input._autocompleteWrapper = wrapper;
+}
+
 /** Currently displayed week (Monday date in YYYY-MM-DD format) */
 let currentWeekOf = getMonday(new Date());
 
@@ -301,6 +485,7 @@ function debouncedSave(input, weekOf, dayIndex, field) {
       setTimeout(() => input.classList.remove('saving'), SAVE_FEEDBACK_DURATION_MS);
       refreshInventoryIfOpen();
       refreshAllocationIndicators();
+      if (getCategoryFromFieldKey(field)) fetchSuggestions(true);
     } else {
       input.classList.remove('saving');
       input.classList.add('error');
@@ -473,8 +658,14 @@ function createMealSection(title, sectionClass, fields, dayData, weekOf, dateStr
       debouncedSave(input, weekOf, dayData.day, f.key);
     });
 
+    // Attach autocomplete for baby meal fields
+    const category = getCategoryFromFieldKey(f.key);
+    if (category) {
+      attachAutocomplete(input, category);
+    }
+
     grid.appendChild(label);
-    grid.appendChild(input);
+    grid.appendChild(input._autocompleteWrapper || input);
   });
 
   section.appendChild(grid);
@@ -1573,6 +1764,7 @@ async function loadVersion() {
 
 // Initialize the app
 loadVersion();
+fetchSuggestions();
 
 // Restore persisted view state
 if (currentPage === 'lookahead') {
