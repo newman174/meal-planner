@@ -70,6 +70,7 @@ npm run deploy         # Build and rsync to production server
 
 ### Utility API
 - `GET /api/version` - Returns `{ version }` from package.json
+- `GET /api/suggestions` - Autocomplete suggestions by category, derived from historical meal data
 
 ### App API (used by frontend)
 - `GET /api/weeks/:weekOf` - Get week data (creates if not exists)
@@ -96,6 +97,18 @@ npm run deploy         # Build and rsync to production server
 - `GET /api/schedule/current` - Current week's meals
 - `GET /api/schedule/upcoming` - Today + next 2 days
 - `GET /api/schedule/:weekOf` - Specific week formatted for display
+
+## Environment Variables
+
+All configured in `src/config.ts`. Optional — defaults work for development.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Server listen port |
+| `NODE_ENV` | `development` | `development` = pretty console logs; `production` = JSON logs + file rotation |
+| `LOG_LEVEL` | `info` | Pino log level (`trace`/`debug`/`info`/`warn`/`error`/`fatal`) |
+| `LOG_DIR` | `./logs` | Directory for production log files |
+| `BACKUP_DIR` | `./backups` | Directory for database backup files |
 
 ## Database Schema
 
@@ -189,6 +202,20 @@ This automatically: updates package.json, creates a git commit, creates a git ta
 - If multiple features/fixes are committed together, use the highest applicable bump (feat + fix = minor)
 - The `preversion` script runs typecheck + tests — if they fail, fix them before versioning
 - Do NOT manually edit the `version` field in package.json — always use `npm version`
+
+## Code Style / Gotchas
+
+- **ESM project**: `"type": "module"` in package.json — all imports must use `.js` extensions (e.g., `import config from './config.js'`), even for `.ts` source files
+- **Module resolution**: `NodeNext` — requires explicit file extensions, no barrel imports
+- **Strict TypeScript**: `strict`, `noImplicitReturns`, `noFallthroughCasesInSwitch` all enabled
+
+## Testing
+
+- Tests use **in-memory SQLite** via `db.setTestDb()` — no file I/O, fast and isolated
+- `tests/helpers/` contains shared setup utilities (db initialization, fixtures)
+- Integration tests (`tests/integration/`) use Supertest against the Express app
+- Frontend tests (`tests/frontend/`) use jsdom to test DOM manipulation in `public/app.js`
+- Unit tests (`tests/unit/`) test pure logic (date utils, validation, backup retention)
 
 ## Timezone
 
