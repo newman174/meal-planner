@@ -1,0 +1,29 @@
+[Unit]
+Description=Meal Planner
+Documentation=https://github.com/yourusername/meal-planner
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/meal-planner
+ExecStart=/root/.nvm/versions/node/v24.13.0/bin/node /root/meal-planner/dist/server.js
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meal-planner
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# Uncomment and set if needed:
+# Environment=LOG_LEVEL=info
+# Environment=LOG_DIR=/root/meal-planner/logs
+# Environment=BACKUP_DIR=/root/meal-planner/backups
+
+# Ensure clean shutdown — systemd sends SIGTERM, Node handles it gracefully
+KillSignal=SIGTERM
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target
